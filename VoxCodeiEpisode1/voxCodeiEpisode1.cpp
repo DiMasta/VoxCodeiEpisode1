@@ -41,6 +41,40 @@ const int MAX_WIDTH = 19;
 //-------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------
 
+class Grid {
+public:
+	void setHeight(int height) { this->height = height; }
+	void setWidth(int width) { this->width = width; }
+
+	int getHeight() const {
+		return height;
+	}
+
+	int getWidth() const {
+		return width;
+	}
+
+	void setCell(int rowIdx, int colIdx, char cell);
+
+private:
+	char grid[MAX_HEIGHT][MAX_WIDTH];
+
+	int height;
+	int width;
+};
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Grid::setCell(int rowIdx, int colIdx, char cell) {
+	grid[rowIdx][colIdx] = cell;
+}
+
+//-------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------
+
 class Game {
 public:
 	Game();
@@ -62,8 +96,8 @@ public:
 private:
 	int turnsCount;
 
-	// Game specific members
-	char grid[MAX_HEIGHT][MAX_WIDTH];
+	/// The game grid
+	Grid firewallGrid;
 };
 
 //*************************************************************************************************************
@@ -72,7 +106,6 @@ private:
 Game::Game() :
 	turnsCount(0) 
 {
-
 }
 
 //*************************************************************************************************************
@@ -122,6 +155,8 @@ void Game::getGameInput() {
 	int width; // width of the firewall grid
 	int height; // height of the firewall grid
 	cin >> width >> height; cin.ignore();
+	firewallGrid.setWidth(width);
+	firewallGrid.setHeight(height);
 
 #ifdef OUTPUT_GAME_DATA
 	cerr << width << " " << height << endl;
@@ -137,7 +172,7 @@ void Game::getGameInput() {
 
 		for (int colIdx = 0; colIdx < width; ++colIdx) {
 			const char cell = row[colIdx];
-			grid[rowIdx][colIdx] = cell;
+			firewallGrid.setCell(rowIdx, colIdx, cell);
 		}
 	}
 }
