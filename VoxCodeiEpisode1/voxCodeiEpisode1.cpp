@@ -17,10 +17,10 @@
 
 using namespace std;
 
-//#define REDIRECT_CIN_FROM_FILE
-//#define REDIRECT_COUT_TO_FILE
-//#define OUTPUT_GAME_DATA
-//#define DEBUG_ONE_TURN
+#define REDIRECT_CIN_FROM_FILE
+#define REDIRECT_COUT_TO_FILE
+#define OUTPUT_GAME_DATA
+#define DEBUG_ONE_TURN
 
 const string INPUT_FILE_NAME = "input.txt";
 const string OUTPUT_FILE_NAME = "output.txt";
@@ -63,6 +63,7 @@ private:
 	int turnsCount;
 
 	// Game specific members
+	char grid[MAX_HEIGHT][MAX_WIDTH];
 };
 
 //*************************************************************************************************************
@@ -104,7 +105,7 @@ void Game::gameEnd() {
 void Game::gameLoop() {
 	while (true) {
 		turnBegin();
-		getTurnInput();	
+		getTurnInput();
 		makeTurn();
 		turnEnd();
 
@@ -126,9 +127,18 @@ void Game::getGameInput() {
 	cerr << width << " " << height << endl;
 #endif // OUTPUT_GAME_DATA
 
-	for (int i = 0; i < height; i++) {
-		string mapRow; // one line of the firewall grid
-		getline(cin, mapRow);
+	for (int rowIdx = 0; rowIdx < height; ++rowIdx) {
+		string row; // one line of the firewall grid
+		getline(cin, row);
+
+#ifdef OUTPUT_GAME_DATA
+		cerr << row << endl;
+#endif // OUTPUT_GAME_DATA
+
+		for (int colIdx = 0; colIdx < width; ++colIdx) {
+			const char cell = row[colIdx];
+			grid[rowIdx][colIdx] = cell;
+		}
 	}
 }
 
