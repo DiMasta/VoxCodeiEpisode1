@@ -55,7 +55,7 @@ static const Direction directions[] = {
 	Direction::RIGHT
 };
 
-static const int MOVE_IN_ROWS[DIRECTIONS_COUNT] = { 1, -1, 0, 0 };
+static const int MOVE_IN_ROWS[DIRECTIONS_COUNT] = { -1, 1, 0, 0 };
 static const int MOVE_IN_COLS[DIRECTIONS_COUNT] = { 0, 0, -1, 1 };
 
 //-------------------------------------------------------------------------------------------------------------
@@ -137,7 +137,12 @@ void Grid::evaluateGridCells() {
 			char& cell = grid[rowIdx][colIdx];
 
 			if (EMPTY == cell) {
-				cell = static_cast<int>(countSurveillanceNodesInRange(rowIdx, colIdx));
+				const int surveillanceNodesInRange = countSurveillanceNodesInRange(rowIdx, colIdx);
+
+				// If the nodes in range are 0 do not set the char to 0, because it is NULL and will terminate the row
+				if (surveillanceNodesInRange) {
+					cell = static_cast<int>(surveillanceNodesInRange);
+				}
 			}
 		}
 	}
