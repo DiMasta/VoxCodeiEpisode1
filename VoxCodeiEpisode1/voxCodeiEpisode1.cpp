@@ -120,6 +120,8 @@ public:
 
 	void setHeight(int height) { this->height = height; }
 	void setWidth(int width) { this->width = width; }
+	void setRoundsLeft(int roundsLeft) { this->roundsLeft = roundsLeft; }
+	void setBombsLeft(int bombsLeft) { this->bombsLeft = bombsLeft; }
 
 	int getHeight() const {
 		return height;
@@ -127,6 +129,14 @@ public:
 
 	int getWidth() const {
 		return width;
+	}
+
+	int getRoundsLeft() const {
+		return roundsLeft;
+	}
+
+	int getBombsLeft() const {
+		return bombsLeft;
 	}
 
 	int setSNodesCount() const {
@@ -203,6 +213,13 @@ public:
 	/// @param[in] actionsToPerform sequence of actions to be tested
 	void recursiveDFSActions(unsigned int recursionFlags, int depth, vector<int> actionsToPerform);
 
+	/// Simulate the given sequence of actions, place and activate bombs taking the turns count in account
+	/// @param[in] actionsToPerform which action to take in certain order
+	void simulate(const vector<int>& actionsToPerform);
+
+	/// Reset firewall grid to its original state from the beginning of the turn
+	void resetForSimulation();
+
 private:
 	/// All possible actions for the grid, including placing bombs on nodes (after thery are destroyed)
 	Action actions[MAX_ACTIONS];
@@ -210,8 +227,17 @@ private:
 	/// The original firewall grid for the game
 	Cell grid[MAX_HEIGHT][MAX_WIDTH];
 
+	/// Grid used to simulate actions, bombs placing and activation
+	Cell simulationGrid[MAX_HEIGHT][MAX_WIDTH];
+
 	int height; ///< Of the firewall grid
 	int width; ///< Of the firewall grid
+
+	/// Number of rounds left before the end of the game
+	int roundsLeft;
+
+	/// Number of bombs left to be placed
+	int bombsLeft;
 
 	/// The count of all surveillance nodes, if they could be destroyed with one bomb, no need of DFS
 	int sNodesCount;
@@ -379,12 +405,12 @@ void Grid::dfsActions() {
 //*************************************************************************************************************
 
 void Grid::recursiveDFSActions(unsigned int recursionFlags, int depth, vector<int> actionsToPerform) {
-	if (SOLUTION_FOUND_FLAG & recursionFlags) {
+	if (solutionFound) {
 		return;
 	}
 
 	if (MAX_ROUNDS == depth) {
-		//simulate using the string for commands so far
+		simulate(actionsToPerform);
 		return;
 	}
 
@@ -396,6 +422,34 @@ void Grid::recursiveDFSActions(unsigned int recursionFlags, int depth, vector<in
 	}
 
 	return recursiveDFSActions(recursionFlags, ++depth, actionsToPerform);
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Grid::simulate(const vector<int>& actionsToPerform) {
+	// Reset simulaiton matrix
+	resetForSimulation();
+
+	// Place bombs in the simualtion matrix one by one
+		// If a bomb have to be placed on a surveillance node, wait until the node is destroyed
+	// If max rounds reached, return
+	// Count turns for to activate bomb
+	// Fill actions array
+		// If not solution is found, evaluation and keeping the best actions must be stored
+
+	
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Grid::resetForSimulation() {
+	for (int rowIdx = 0; rowIdx < height; ++rowIdx) {
+		for (int colIdx = 0; colIdx < width; ++colIdx) {
+			simulationGrid[rowIdx][colIdx] = grid[rowIdx][colIdx];
+		}
+	}
 }
 
 //-------------------------------------------------------------------------------------------------------------
