@@ -17,15 +17,18 @@
 
 using namespace std;
 
-#define REDIRECT_CIN_FROM_FILE
-#define REDIRECT_COUT_TO_FILE
-#define OUTPUT_GAME_DATA
-#define DEBUG_ONE_TURN
+//#define REDIRECT_CIN_FROM_FILE
+//#define REDIRECT_COUT_TO_FILE
+//#define OUTPUT_GAME_DATA
+//#define DEBUG_ONE_TURN
 
 const string INPUT_FILE_NAME = "input.txt";
 const string OUTPUT_FILE_NAME = "output.txt";
 
+const string WAIT = "WAIT";
+
 static const int INVALID_ID = -1;
+static const int INVALID_IDX = -1;
 static const int INVALID_NODE_DEPTH = -1;
 static const int TREE_ROOT_NODE_DEPTH = 1;
 static const int ZERO_CHAR = '0';
@@ -38,9 +41,12 @@ static const int MAX_WIDTH = 19;
 static const int MAX_ROUNDS = 19;
 static const int BOMB_RADIUS = 3;
 
-static const char EMPTY = '.';
-static const char WALL = '#';
-static const char SURVEILLANCE_NODE = '@';
+typedef unsigned char Cell;
+
+static const Cell EMPTY = '.';
+static const Cell WALL = '#';
+static const Cell SURVEILLANCE_NODE = '@';
+static const Cell S_NODE_GOOD_FOR_BOMB = 0b1000'0000; // The cell is surveillance node, but if the node is destroyed a bomb may be placed there to destroy other surveillance nodes
 
 enum class Direction : int {
 	UP = 0,
@@ -67,11 +73,28 @@ static const int MOVE_IN_COLS[DIRECTIONS_COUNT] = { 0, 0, -1, 1 };
 /// Represents a turn action, where(row, col) to place a bomb
 /// (-1, -1) represents "WAIT" action, needed when a bomb must be placed on not yet destroyed sureveillance node
 struct Action {
+	/// By default set the invalid action, that means "WAIT"
+	Action() : row(INVALID_IDX), col(INVALID_IDX) {}
 	Action(int row, int col) : row(row), col(col) {}
 
 	int row;
 	int col;
 };
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+std::ostream& operator<<(std::ostream& out, const Action& action) {
+	if (INVALID_IDX == action.row || INVALID_IDX == action.col) {
+		out << WAIT;
+	}
+	else {
+		out << action.row << " " << action.col;
+	}
+
+	out << endl;
+	return out;
+}
 
 //-------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------
@@ -80,6 +103,8 @@ struct Action {
 
 class Grid {
 public:
+	Grid();
+
 	void setHeight(int height) { this->height = height; }
 	void setWidth(int width) { this->width = width; }
 
@@ -91,17 +116,29 @@ public:
 		return width;
 	}
 
+	int setSNodesCount() const {
+		return sNodesCount;
+	}
+
+	int getActionsCount() {
+		return actionsCount;
+	}
+
+	bool getSolutionFound() {
+		return solutionFound;
+	}
+
 	/// Set cell entry, without checking for valid coordinates, which may be a mistake
 	/// @param[in] rowIdx the index of the row, where the cell will be set
 	/// @param[in] colIdx the index of the column, where the cell will be set
 	/// @param[in] cell the value for the cell, that will be set
-	void setCell(int rowIdx, int colIdx, char cell);
+	void setCell(int rowIdx, int colIdx, Cell cell);
 
 	/// Get cell, without checking for valid coordinates, which may be a mistake
 	/// @param[in] rowIdx the index of the row, for the cell
 	/// @param[in] colIdx the index of the column, for the cell
 	/// @return the cell value
-	char getCell(int rowIdx, int colIdx) const;
+	Cell getCell(int rowIdx, int colIdx) const;
 
 	/// Iterate the whole grid and set for each cell how many surveillance nodes will be destroyed if a bomb is set there
 	/// This hides the risk when a bomb is detonated it changes the cell evaluation, but I think for starting marking
@@ -122,24 +159,67 @@ public:
 	/// @return surveillance nodes in range count
 	int countSurveillanceNodesInRangeForDirection(int rowIdx, int colIdx, Direction direction) const;
 
-private:
-	char grid[MAX_HEIGHT][MAX_WIDTH];
+	/// Store the given action, in which cell to place a bomb
+	/// @param[in] rowIdx the index of the row, to place a bomb
+	/// @param[in] colIdx the index of the column, to place a bomb
+	void addAction(int rowIdx, int colIdx);
 
-	int height;
-	int width;
+	/// Ovewrite the actionIdx-th action, in which cell to place a bomb
+	/// @param[in] actionIdx action's index
+	/// @param[in] rowIdx the index of the row, to place a bomb
+	/// @param[in] colIdx the index of the column, to place a bomb
+	void setAction(int actionIdx, int rowIdx, int colIdx);
+
+	/// Get action with given index
+	/// @param[in] actionIdx action's index
+	/// @return the action
+	const Action& getAction(int actionIdx) const;
+
+private:
+	/// All possible actions for the grid, including placing bombs on nodes (after thery are destroyed)
+	Action actions[MAX_ROUNDS];
+
+	/// The original firewall grid for the game
+	Cell grid[MAX_HEIGHT][MAX_WIDTH];
+
+	int height; ///< Of the firewall grid
+	int width; ///< Of the firewall grid
+
+	/// The count of all surveillance nodes, if they could be destroyed with one bomb, no need of DFS
+	int sNodesCount;
+
+	/// All possible places for bombs
+	int actionsCount;
+
+	/// Marks if we found set actions, which are solving the puzzle
+	bool solutionFound;
 };
 
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::setCell(int rowIdx, int colIdx, char cell) {
+Grid::Grid() :
+	sNodesCount(0),
+	actionsCount(0),
+	solutionFound(false)
+{
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Grid::setCell(int rowIdx, int colIdx, Cell cell) {
+	if (SURVEILLANCE_NODE == cell) {
+		++sNodesCount;
+	}
+
 	grid[rowIdx][colIdx] = cell;
 }
 
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-char Grid::getCell(int rowIdx, int colIdx) const {
+Cell Grid::getCell(int rowIdx, int colIdx) const {
 	return grid[rowIdx][colIdx];
 }
 
@@ -149,16 +229,38 @@ char Grid::getCell(int rowIdx, int colIdx) const {
 void Grid::evaluateGridCells() {
 	for (int rowIdx = 0; rowIdx < height; ++rowIdx) {
 		for (int colIdx = 0; colIdx < width; ++colIdx) {
-			char& cell = grid[rowIdx][colIdx];
+			Cell& cell = grid[rowIdx][colIdx];
+			const bool cellIsEmpty = EMPTY == cell;
+			const bool cellIsSNode = SURVEILLANCE_NODE == cell;
 
-			if (EMPTY == cell) {
+			if (cellIsEmpty || cellIsSNode) {
 				const int surveillanceNodesInRange = countSurveillanceNodesInRange(rowIdx, colIdx);
 
 				// If the nodes in range are 0 do not set the char to 0, because it is NULL and will terminate the row
 				if (surveillanceNodesInRange) {
-					cell = static_cast<int>(surveillanceNodesInRange);
+					cell = static_cast<Cell>(surveillanceNodesInRange);
+
+					if (cellIsSNode) {
+						cell |= S_NODE_GOOD_FOR_BOMB;
+					}
+
+					// Ignore cells where only one node will be destroyed, not sure if this is right
+					if (surveillanceNodesInRange > 1) {
+						addAction(rowIdx, colIdx);
+					}
+
+					// Only one action is needed to destroy all surveillance nodes
+					if (surveillanceNodesInRange == sNodesCount && cellIsEmpty) {
+						solutionFound = true;
+						setAction(0, rowIdx, colIdx); // Overwrite first action
+						break;
+					}
 				}
 			}
+		}
+
+		if (solutionFound) {
+			break;
 		}
 	}
 }
@@ -187,13 +289,13 @@ int Grid::countSurveillanceNodesInRangeForDirection(int rowIdx, int colIdx, Dire
 		colIdx += MOVE_IN_COLS[static_cast<int>(direction)];
 
 		if (rowIdx >= 0 && rowIdx < height && colIdx >= 0 && colIdx < width) {
-			const char cell = getCell(rowIdx, colIdx);
+			const Cell cell = getCell(rowIdx, colIdx);
 
 			if (WALL == cell) {
 				break;
 			}
 
-			if (SURVEILLANCE_NODE == cell) {
+			if ((SURVEILLANCE_NODE == cell) || (cell & S_NODE_GOOD_FOR_BOMB)) {
 				++affectedNodesCount;
 			}
 
@@ -205,6 +307,27 @@ int Grid::countSurveillanceNodesInRangeForDirection(int rowIdx, int colIdx, Dire
 	}
 
 	return affectedNodesCount;
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Grid::addAction(int rowIdx, int colIdx) {
+	actions[actionsCount++] = Action(rowIdx, colIdx);
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Grid::setAction(int actionIdx, int rowIdx, int colIdx) {
+	actions[actionIdx] = Action(rowIdx, colIdx);
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+const Action& Grid::getAction(int actionIdx) const {
+	return actions[actionIdx];
 }
 
 //-------------------------------------------------------------------------------------------------------------
@@ -309,7 +432,7 @@ void Game::getGameInput() {
 #endif // OUTPUT_GAME_DATA
 
 		for (int colIdx = 0; colIdx < width; ++colIdx) {
-			const char cell = row[colIdx];
+			const Cell cell = row[colIdx];
 			firewallGrid.setCell(rowIdx, colIdx, cell);
 		}
 	}
@@ -338,7 +461,9 @@ void Game::turnBegin() {
 //*************************************************************************************************************
 
 void Game::makeTurn() {
-	cout << "0 1" << endl;
+	if (firewallGrid.getSolutionFound()) {
+		cout << firewallGrid.getAction(turnsCount);
+	}
 }
 
 //*************************************************************************************************************
