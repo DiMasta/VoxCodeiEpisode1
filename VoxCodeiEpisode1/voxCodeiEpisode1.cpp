@@ -17,15 +17,16 @@
 
 using namespace std;
 
-//#define REDIRECT_CIN_FROM_FILE
-//#define REDIRECT_COUT_TO_FILE
-//#define OUTPUT_GAME_DATA
-//#define DEBUG_ONE_TURN
+#define REDIRECT_CIN_FROM_FILE
+#define REDIRECT_COUT_TO_FILE
+#define OUTPUT_GAME_DATA
+#define DEBUG_ONE_TURN
 
 const string INPUT_FILE_NAME = "input.txt";
 const string OUTPUT_FILE_NAME = "output.txt";
 
 const string WAIT = "WAIT";
+const string EMPTY_STRING = "";
 
 static const int INVALID_ID = -1;
 static const int INVALID_IDX = -1;
@@ -39,7 +40,9 @@ static const int PAIR = 2;
 static const int MAX_HEIGHT = 19;
 static const int MAX_WIDTH = 19;
 static const int MAX_ROUNDS = 19;
+static const int MAX_ACTIONS = MAX_ROUNDS * 2; // There are may be more than 19 actions to perform, could be more than needed
 static const int BOMB_RADIUS = 3;
+static const unsigned int SOLUTION_FOUND_FLAG = 0b1000'0000'0000'0000'0000'0000'0000'0000;
 
 typedef unsigned char Cell;
 
@@ -74,12 +77,22 @@ static const int MOVE_IN_COLS[DIRECTIONS_COUNT] = { 0, 0, -1, 1 };
 /// (-1, -1) represents "WAIT" action, needed when a bomb must be placed on not yet destroyed sureveillance node
 struct Action {
 	/// By default set the invalid action, that means "WAIT"
-	Action() : row(INVALID_IDX), col(INVALID_IDX) {}
-	Action(int row, int col) : row(row), col(col) {}
+	Action() : row(INVALID_IDX), col(INVALID_IDX), afffectedSNodesCount(0){}
+	Action(int row, int col, int afffectedSNodesCount) : row(row), col(col), afffectedSNodesCount(afffectedSNodesCount) {}
 
-	int row;
-	int col;
+	int row; ///< where to place the bomb
+	int col; ///< where to place the bomb
+
+	/// How many surveillance nodes are affected for this cell
+	int afffectedSNodesCount;
 };
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+bool biggestAction(const Action& lhs, const Action& rhs) {
+	return lhs.afffectedSNodesCount > rhs.afffectedSNodesCount;
+}
 
 //*************************************************************************************************************
 //*************************************************************************************************************
@@ -162,22 +175,37 @@ public:
 	/// Store the given action, in which cell to place a bomb
 	/// @param[in] rowIdx the index of the row, to place a bomb
 	/// @param[in] colIdx the index of the column, to place a bomb
-	void addAction(int rowIdx, int colIdx);
+	/// @param[in] afffectedSNodesCount how many sureveillance nodes are affected from this cell
+	void addAction(int rowIdx, int colIdx, int afffectedSNodesCount);
 
 	/// Ovewrite the actionIdx-th action, in which cell to place a bomb
 	/// @param[in] actionIdx action's index
 	/// @param[in] rowIdx the index of the row, to place a bomb
 	/// @param[in] colIdx the index of the column, to place a bomb
-	void setAction(int actionIdx, int rowIdx, int colIdx);
+	/// @param[in] afffectedSNodesCount how many sureveillance nodes are affected from this cell
+	void setAction(int actionIdx, int rowIdx, int colIdx, int afffectedSNodesCount);
 
 	/// Get action with given index
 	/// @param[in] actionIdx action's index
 	/// @return the action
 	const Action& getAction(int actionIdx) const;
 
+	/// Sort all possible action based on how many surveillance nodes are affected by each
+	void sortActions();
+
+	/// Perform actions using DFS, check all possible actions combination until solution is found or max depth is reached
+	/// when max depth(leave) is reached simulate all gathered actions
+	void dfsActions();
+
+	/// Perform recursion to generate all actions combinations, at the bottom of the recursion simulate the action sequance
+	/// @param[in] recursionFlags shows which actions are played so far and if a solution is found
+	/// @param[in] depth the current depth of the recursion
+	/// @param[in] actionsToPerform sequence of actions to be tested
+	void recursiveDFSActions(unsigned int recursionFlags, int depth, vector<int> actionsToPerform);
+
 private:
 	/// All possible actions for the grid, including placing bombs on nodes (after thery are destroyed)
-	Action actions[MAX_ROUNDS];
+	Action actions[MAX_ACTIONS];
 
 	/// The original firewall grid for the game
 	Cell grid[MAX_HEIGHT][MAX_WIDTH];
@@ -246,13 +274,13 @@ void Grid::evaluateGridCells() {
 
 					// Ignore cells where only one node will be destroyed, not sure if this is right
 					if (surveillanceNodesInRange > 1) {
-						addAction(rowIdx, colIdx);
+						addAction(rowIdx, colIdx, surveillanceNodesInRange);
 					}
 
 					// Only one action is needed to destroy all surveillance nodes
 					if (surveillanceNodesInRange == sNodesCount && cellIsEmpty) {
 						solutionFound = true;
-						setAction(0, rowIdx, colIdx); // Overwrite first action
+						setAction(0, rowIdx, colIdx, surveillanceNodesInRange); // Overwrite first action
 						break;
 					}
 				}
@@ -312,15 +340,15 @@ int Grid::countSurveillanceNodesInRangeForDirection(int rowIdx, int colIdx, Dire
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::addAction(int rowIdx, int colIdx) {
-	actions[actionsCount++] = Action(rowIdx, colIdx);
+void Grid::addAction(int rowIdx, int colIdx, int afffectedSNodesCount) {
+	actions[actionsCount++] = Action(rowIdx, colIdx, afffectedSNodesCount);
 }
 
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::setAction(int actionIdx, int rowIdx, int colIdx) {
-	actions[actionIdx] = Action(rowIdx, colIdx);
+void Grid::setAction(int actionIdx, int rowIdx, int colIdx, int afffectedSNodesCount) {
+	actions[actionIdx] = Action(rowIdx, colIdx, afffectedSNodesCount);
 }
 
 //*************************************************************************************************************
@@ -328,6 +356,46 @@ void Grid::setAction(int actionIdx, int rowIdx, int colIdx) {
 
 const Action& Grid::getAction(int actionIdx) const {
 	return actions[actionIdx];
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Grid::sortActions() {
+	sort(begin(actions), end(actions), biggestAction);
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Grid::dfsActions() {
+	vector<int> actionsToPerform;
+	actionsToPerform.reserve(actionsCount);
+
+	recursiveDFSActions(0, 0, actionsToPerform);
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Grid::recursiveDFSActions(unsigned int recursionFlags, int depth, vector<int> actionsToPerform) {
+	if (SOLUTION_FOUND_FLAG & recursionFlags) {
+		return;
+	}
+
+	if (MAX_ROUNDS == depth) {
+		//simulate using the string for commands so far
+		return;
+	}
+
+	for (int actionIdx = 0; actionIdx < actionsCount; ++actionIdx) {
+		const unsigned int actionBit = 1 << actionIdx;
+		if (!(actionBit & recursionFlags)) {
+			actionsToPerform.push_back(actionIdx);
+		}
+	}
+
+	return recursiveDFSActions(recursionFlags, ++depth, actionsToPerform);
 }
 
 //-------------------------------------------------------------------------------------------------------------
@@ -385,6 +453,7 @@ void Game::initGame() {
 
 void Game::gameBegin() {
 	firewallGrid.evaluateGridCells();
+	firewallGrid.sortActions();
 }
 
 //*************************************************************************************************************
@@ -522,34 +591,3 @@ int main(int argc, char** argv) {
 
 	return 0;
 }
-
-//#include <iostream>
-//#include <string>
-//#include <vector>
-//#include <algorithm>
-//
-//using namespace std;
-//
-//int main() {
-//	int width; // width of the firewall grid
-//	int height; // height of the firewall grid
-//	cin >> width >> height; cin.ignore();
-//	cerr << width << " " << height << endl;
-//	for (int i = 0; i < height; i++) {
-//		string mapRow; // one line of the firewall grid
-//		getline(cin, mapRow);
-//	}
-//
-//	// game loop
-//	while (1) {
-//		int rounds; // number of rounds left before the end of the game
-//		int bombs; // number of bombs left
-//		cin >> rounds >> bombs; cin.ignore();
-//		cerr << rounds << " " << bombs << endl;
-//
-//		// Write an action using cout. DON'T FORGET THE "<< endl"
-//		// To debug: cerr << "Debug messages..." << endl;
-//
-//		cout << "0 1" << endl;
-//	}
-//}
