@@ -35,6 +35,7 @@ static const int PAIR = 2;
 
 static const int MAX_HEIGHT = 19;
 static const int MAX_WIDTH = 19;
+static const int MAX_ROUNDS = 19;
 static const int BOMB_RADIUS = 3;
 
 static const char EMPTY = '.';
@@ -57,6 +58,20 @@ static const Direction directions[] = {
 
 static const int MOVE_IN_ROWS[DIRECTIONS_COUNT] = { -1, 1, 0, 0 };
 static const int MOVE_IN_COLS[DIRECTIONS_COUNT] = { 0, 0, -1, 1 };
+
+//-------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------
+
+/// Represents a turn action, where(row, col) to place a bomb
+/// (-1, -1) represents "WAIT" action, needed when a bomb must be placed on not yet destroyed sureveillance node
+struct Action {
+	Action(int row, int col) : row(row), col(col) {}
+
+	int row;
+	int col;
+};
 
 //-------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------
