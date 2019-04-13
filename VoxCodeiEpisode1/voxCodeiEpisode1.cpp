@@ -77,8 +77,11 @@ static const int MOVE_IN_COLS[DIRECTIONS_COUNT] = { 0, 0, -1, 1 };
 /// (-1, -1) represents "WAIT" action, needed when a bomb must be placed on not yet destroyed sureveillance node
 struct Action {
 	/// By default set the invalid action, that means "WAIT"
-	Action() : row(INVALID_IDX), col(INVALID_IDX), afffectedSNodesCount(0){}
+	Action() : row(INVALID_IDX), col(INVALID_IDX), afffectedSNodesCount(0) {}
 	Action(int row, int col, int afffectedSNodesCount) : row(row), col(col), afffectedSNodesCount(afffectedSNodesCount) {}
+
+	/// Set the default values
+	void init();
 
 	int row; ///< where to place the bomb
 	int col; ///< where to place the bomb
@@ -86,6 +89,15 @@ struct Action {
 	/// How many surveillance nodes are affected for this cell
 	int afffectedSNodesCount;
 };
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Action::init() {
+	row = INVALID_IDX;
+	col = INVALID_IDX;
+	afffectedSNodesCount = 0;
+}
 
 //*************************************************************************************************************
 //*************************************************************************************************************
@@ -205,7 +217,8 @@ public:
 
 	/// Perform actions using DFS, check all possible actions combination until solution is found or max depth is reached
 	/// when max depth(leave) is reached simulate all gathered actions
-	void dfsActions();
+	/// @param[in] turnsCount the current turn index
+	void dfsActions(int turnsCount);
 
 	/// Perform recursion to generate all actions combinations, at the bottom of the recursion simulate the action sequance
 	/// @param[in] recursionFlags shows which actions are played so far and if a solution is found
@@ -223,6 +236,9 @@ public:
 private:
 	/// All possible actions for the grid, including placing bombs on nodes (after thery are destroyed)
 	Action actions[MAX_ACTIONS];
+
+	/// The sequence of the best actions
+	int actionsBestSequence[MAX_ACTIONS];
 
 	/// The original firewall grid for the game
 	Cell grid[MAX_HEIGHT][MAX_WIDTH];
@@ -245,6 +261,9 @@ private:
 	/// All possible places for bombs
 	int actionsCount;
 
+	/// Count of best solutions, reset each turn
+	int solutionActionsCount;
+
 	/// Marks if we found set actions, which are solving the puzzle
 	bool solutionFound;
 };
@@ -255,6 +274,7 @@ private:
 Grid::Grid() :
 	sNodesCount(0),
 	actionsCount(0),
+	solutionActionsCount(0),
 	solutionFound(false)
 {
 }
@@ -394,10 +414,11 @@ void Grid::sortActions() {
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::dfsActions() {
+void Grid::dfsActions(int turnsCount) {
 	vector<int> actionsToPerform;
 	actionsToPerform.reserve(actionsCount);
 
+	// Pass the turns count as starting depth, because depth must be cohirent to left rounds
 	recursiveDFSActions(0, 0, actionsToPerform);
 }
 
@@ -428,7 +449,6 @@ void Grid::recursiveDFSActions(unsigned int recursionFlags, int depth, vector<in
 //*************************************************************************************************************
 
 void Grid::simulate(const vector<int>& actionsToPerform) {
-	// Reset simulaiton matrix
 	resetForSimulation();
 
 	// Place bombs in the simualtion matrix one by one
@@ -438,7 +458,23 @@ void Grid::simulate(const vector<int>& actionsToPerform) {
 	// Fill actions array
 		// If not solution is found, evaluation and keeping the best actions must be stored
 
-	
+	int actionToPerformIdx = 0;
+	for (int roundIdx = 0; roundIdx < roundsLeft; ++roundIdx) {
+		const int actionIdx = actionsToPerform[actionToPerformIdx];
+		const Action& actionToPerform = actions[actionIdx];
+
+		//if (couldPlaceBomb(actionToPerform)) {
+		//	placeBomb(actionToPerform);
+		//	actionsBestSequence[solutionActionsCount++] = actionToPerformIdx;
+		//
+		//	++actionToPerformIdx;
+		//}
+		//else {
+		//	actionsBestSequence[solutionActionsCount++] = INVALID_ID; // Wait action
+		//}
+		//
+		//activateBombs();
+	}
 }
 
 //*************************************************************************************************************
@@ -450,6 +486,8 @@ void Grid::resetForSimulation() {
 			simulationGrid[rowIdx][colIdx] = grid[rowIdx][colIdx];
 		}
 	}
+
+	solutionActionsCount = 0;
 }
 
 //-------------------------------------------------------------------------------------------------------------
@@ -578,6 +616,7 @@ void Game::getTurnInput() {
 //*************************************************************************************************************
 
 void Game::turnBegin() {
+	firewallGrid.dfsActions(turnsCount);
 }
 
 //*************************************************************************************************************
