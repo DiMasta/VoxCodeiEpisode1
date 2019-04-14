@@ -144,7 +144,8 @@ public:
 	/// @param[in/out] simulationGrid reference to the simulation grid
 	/// @param[out] explodedBombs if other bomb is triggered add it for explotion
 	/// @param[out] explodedBombsCount if other bomb is triggered increase the triggered bombs
-	void explode(Cell (&simulationGrid)[MAX_HEIGHT][MAX_WIDTH], Bomb (&explodedBombs)[MAX_BOMBS], int& explodedBombsCount) const;
+	/// @return how many nodes are destroyed from this explosion
+	int explode(Cell (&simulationGrid)[MAX_HEIGHT][MAX_WIDTH], Bomb (&explodedBombs)[MAX_BOMBS], int& explodedBombsCount) const;
 
 private:
 	int row; ///< bomb row idx
@@ -175,7 +176,9 @@ bool Bomb::update() {
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Bomb::explode(Cell (&simulationGrid)[MAX_HEIGHT][MAX_WIDTH], Bomb (&explodedBombs)[MAX_BOMBS], int& explodedBombsCount) const {
+int Bomb::explode(Cell (&simulationGrid)[MAX_HEIGHT][MAX_WIDTH], Bomb (&explodedBombs)[MAX_BOMBS], int& explodedBombsCount) const {
+	int destroyedNodes = 0;
+
 	for (const Direction direction : directions) {
 		int rowRange = row;
 		int colRange = col;
@@ -191,6 +194,7 @@ void Bomb::explode(Cell (&simulationGrid)[MAX_HEIGHT][MAX_WIDTH], Bomb (&explode
 				break; // Continue with next direction
 			}
 			else if (SURVEILLANCE_NODE & cell) {
+				++destroyedNodes;
 				cell &= ~SURVEILLANCE_NODE; // destroy node
 			}
 			else if (BOMB_FLAG & cell) {
@@ -201,6 +205,8 @@ void Bomb::explode(Cell (&simulationGrid)[MAX_HEIGHT][MAX_WIDTH], Bomb (&explode
 	}
 
 	simulationGrid[row][col] &= ~BOMB_FLAG; // Clear the bomb from the simulation grid
+
+	return destroyedNodes;
 }
 
 //-------------------------------------------------------------------------------------------------------------
@@ -325,7 +331,8 @@ public:
 	void placeBomb(const Action& action);
 
 	/// Update placed bombs, decrease their timers, if bomb reached 0 timer, explode
-	void bombsTick();
+	/// @return how many surveillance nodes are destroyed in the simulated turn
+	int bombsTick();
 
 private:
 	/// All possible actions for the grid, including placing bombs on nodes (after thery are destroyed)
@@ -555,6 +562,8 @@ void Grid::recursiveDFSActions(unsigned int recursionFlags, int depth, vector<in
 void Grid::simulate(const vector<int>& actionsToPerform) {
 	resetForSimulation();
 
+	int surveillanceNodesDestroyed = 0;
+
 	int actionToPerformIdx = 0;
 	for (int roundIdx = 0; roundIdx < roundsLeft; ++roundIdx) {
 		if (actionToPerformIdx < actionsToPerform.size()) {
@@ -572,7 +581,11 @@ void Grid::simulate(const vector<int>& actionsToPerform) {
 			}
 		}
 
-		bombsTick();
+		surveillanceNodesDestroyed += bombsTick();
+	}
+
+	if (surveillanceNodesDestroyed == sNodesCount) {
+		solutionFound = true;
 	}
 }
 
@@ -613,7 +626,7 @@ void Grid::placeBomb(const Action& action) {
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::bombsTick() {
+int Grid::bombsTick() {
 	Bomb explodedBombs[MAX_BOMBS]; // Bombs indecies which are exploding this turn
 	int explodedBombsCount = 0;
 
@@ -624,12 +637,14 @@ void Grid::bombsTick() {
 		}
 	}
 
+	int surveillanceNodesDestroyed = 0;
+
 	// Explode bombs with 0 timers, explode bombs which are triggered by other bombs
 	for (int bombIdx = 0; bombIdx < explodedBombsCount; ++bombIdx) {
-		explodedBombs[bombIdx].explode(simulationGrid, explodedBombs, explodedBombsCount);
+		surveillanceNodesDestroyed += explodedBombs[bombIdx].explode(simulationGrid, explodedBombs, explodedBombsCount);
 	}
 
-	// Remove bombs from simulation grid
+	return surveillanceNodesDestroyed;
 }
 
 //-------------------------------------------------------------------------------------------------------------
