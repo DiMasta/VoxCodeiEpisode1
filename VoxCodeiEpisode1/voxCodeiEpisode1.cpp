@@ -19,7 +19,7 @@ using namespace std;
 
 #define REDIRECT_CIN_FROM_FILE
 #define REDIRECT_COUT_TO_FILE
-#define OUTPUT_GAME_DATA
+//#define OUTPUT_GAME_DATA
 #define DEBUG_ONE_TURN
 
 const string INPUT_FILE_NAME = "input.txt";
@@ -39,9 +39,11 @@ static const int PAIR = 2;
 
 static const int MAX_HEIGHT = 19;
 static const int MAX_WIDTH = 19;
+static const int MAX_BOMBS = 9;
 static const int MAX_ROUNDS = 19;
 static const int MAX_ACTIONS = MAX_ROUNDS * 2; // There are may be more than 19 actions to perform, could be more than needed
 static const int BOMB_RADIUS = 3;
+static const int BOMB_ROUNDS_TO_EXPLODE = 3;
 static const unsigned int SOLUTION_FOUND_FLAG = 0b1000'0000'0000'0000'0000'0000'0000'0000;
 
 typedef unsigned char Cell;
@@ -49,7 +51,8 @@ typedef unsigned char Cell;
 static const Cell EMPTY = '.';
 static const Cell WALL = '#';
 static const Cell SURVEILLANCE_NODE = '@';
-static const Cell S_NODE_GOOD_FOR_BOMB = 0b1000'0000; // The cell is surveillance node, but if the node is destroyed a bomb may be placed there to destroy other surveillance nodes
+static const Cell S_NODE_GOOD_FOR_BOMB		= 0b1000'0000; // The cell is surveillance node, but if the node is destroyed a bomb may be placed there to destroy other surveillance nodes
+static const Cell BOMB_FLAG					= 0b0100'0000; // The cell is bomb
 
 enum class Direction : int {
 	UP = 0,
@@ -119,6 +122,52 @@ std::ostream& operator<<(std::ostream& out, const Action& action) {
 
 	out << endl;
 	return out;
+}
+
+//-------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------
+
+class Bomb {
+public:
+	// Activate
+	//void activate();
+	//void update();
+
+	/// Initialize bombs variables
+	/// @param[in] row bomb row idx
+	/// @param[in] col bombcol idx
+	void init(int row, int col);
+
+	/// Update the timer of the bomb, decrease it
+	/// @return true if the bomb explodes
+	bool update();
+
+private:
+	int row; ///< bomb row idx
+	int col; ///< bomb col idx
+
+	/// Starting at 3 and each round decreased, when 0 the bomb explodes
+	int roundsLeft;
+};
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Bomb::init(int row, int col) {
+	this->row = row;
+	this->col = col;
+
+	roundsLeft = BOMB_ROUNDS_TO_EXPLODE;
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+bool Bomb::update() {
+	--roundsLeft;
+	return 0 == roundsLeft;
 }
 
 //-------------------------------------------------------------------------------------------------------------
@@ -233,6 +282,18 @@ public:
 	/// Reset firewall grid to its original state from the beginning of the turn
 	void resetForSimulation();
 
+	/// Check if given action places the bomb on empty cell or surveillance node cell
+	/// @param[in] action the action to perform
+	/// @return true if the action places bomb on empty cell false otherwise
+	bool couldPlaceBomb(const Action& action) const;
+
+	/// Place bomb according to the given action, placing the cell to place the bomb is guartied to be empty
+	/// @param[in] action where to place the bomb
+	void placeBomb(const Action& action);
+
+	/// Update placed bombs, decrease their timers, if bomb reached 0 timer, explode
+	void bombsTick();
+
 private:
 	/// All possible actions for the grid, including placing bombs on nodes (after thery are destroyed)
 	Action actions[MAX_ACTIONS];
@@ -245,6 +306,9 @@ private:
 
 	/// Grid used to simulate actions, bombs placing and activation
 	Cell simulationGrid[MAX_HEIGHT][MAX_WIDTH];
+
+	/// Bombs spread throug the simulation grid
+	Bomb bombs[MAX_BOMBS];
 
 	int height; ///< Of the firewall grid
 	int width; ///< Of the firewall grid
@@ -264,6 +328,9 @@ private:
 	/// Count of best solutions, reset each turn
 	int solutionActionsCount;
 
+	/// How many bombs are placed, reset each simulation
+	int bombsCount;
+
 	/// Marks if we found set actions, which are solving the puzzle
 	bool solutionFound;
 };
@@ -275,6 +342,7 @@ Grid::Grid() :
 	sNodesCount(0),
 	actionsCount(0),
 	solutionActionsCount(0),
+	bombsCount(0),
 	solutionFound(false)
 {
 }
@@ -430,7 +498,9 @@ void Grid::recursiveDFSActions(unsigned int recursionFlags, int depth, vector<in
 		return;
 	}
 
-	if (MAX_ROUNDS == depth) {
+	// Each level of the tree represent placing a bomb, no need more levels than bomb
+	// Rounds left will be taken in account when simualtion the action sequence
+	if (bombsLeft == depth) {
 		simulate(actionsToPerform);
 		return;
 	}
@@ -439,10 +509,11 @@ void Grid::recursiveDFSActions(unsigned int recursionFlags, int depth, vector<in
 		const unsigned int actionBit = 1 << actionIdx;
 		if (!(actionBit & recursionFlags)) {
 			actionsToPerform.push_back(actionIdx);
+			recursionFlags |= actionBit;
+
+			return recursiveDFSActions(recursionFlags, ++depth, actionsToPerform);
 		}
 	}
-
-	return recursiveDFSActions(recursionFlags, ++depth, actionsToPerform);
 }
 
 //*************************************************************************************************************
@@ -451,29 +522,22 @@ void Grid::recursiveDFSActions(unsigned int recursionFlags, int depth, vector<in
 void Grid::simulate(const vector<int>& actionsToPerform) {
 	resetForSimulation();
 
-	// Place bombs in the simualtion matrix one by one
-		// If a bomb have to be placed on a surveillance node, wait until the node is destroyed
-	// If max rounds reached, return
-	// Count turns for to activate bomb
-	// Fill actions array
-		// If not solution is found, evaluation and keeping the best actions must be stored
-
 	int actionToPerformIdx = 0;
 	for (int roundIdx = 0; roundIdx < roundsLeft; ++roundIdx) {
 		const int actionIdx = actionsToPerform[actionToPerformIdx];
 		const Action& actionToPerform = actions[actionIdx];
 
-		//if (couldPlaceBomb(actionToPerform)) {
-		//	placeBomb(actionToPerform);
-		//	actionsBestSequence[solutionActionsCount++] = actionToPerformIdx;
-		//
-		//	++actionToPerformIdx;
-		//}
-		//else {
-		//	actionsBestSequence[solutionActionsCount++] = INVALID_ID; // Wait action
-		//}
-		//
-		//activateBombs();
+		if (couldPlaceBomb(actionToPerform)) {
+			placeBomb(actionToPerform);
+		
+			actionsBestSequence[solutionActionsCount++] = actionToPerformIdx;
+			++actionToPerformIdx;
+		}
+		else {
+			actionsBestSequence[solutionActionsCount++] = INVALID_ID; // Wait action
+		}
+
+		bombsTick();
 	}
 }
 
@@ -488,6 +552,48 @@ void Grid::resetForSimulation() {
 	}
 
 	solutionActionsCount = 0;
+	bombsCount = 0;
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+bool Grid::couldPlaceBomb(const Action& action) const {
+	const Cell cell = simulationGrid[action.row][action.col];
+
+	return !(cell & S_NODE_GOOD_FOR_BOMB);
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Grid::placeBomb(const Action& action) {
+	Cell& cell = simulationGrid[action.row][action.col];
+	
+	bombs[bombsCount++].init(action.row, action.col);
+
+	cell |= BOMB_FLAG;
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Grid::bombsTick() {
+	int explodedBombs[MAX_BOMBS]; // Bombs indecies which are exploding this turn
+	int explodedBombsCount = 0;
+
+	// Go through all placed bombs, update their timers
+	for (int bombIdx = 0; bombIdx < bombsCount; ++bombIdx) {
+		if (bombs[bombIdx].update()) {
+			explodedBombs[explodedBombsCount++] = bombIdx;
+		}
+	}
+
+	// Explode bombs with 0 timers
+
+	// Explode bombs which are triggered by other bombs
+
+	// Remove bombs from simulation grid
 }
 
 //-------------------------------------------------------------------------------------------------------------
@@ -559,8 +665,8 @@ void Game::gameEnd() {
 
 void Game::gameLoop() {
 	while (true) {
-		turnBegin();
 		getTurnInput();
+		turnBegin();
 		makeTurn();
 		turnEnd();
 
@@ -606,6 +712,8 @@ void Game::getTurnInput() {
 	int rounds; // number of rounds left before the end of the game
 	int bombs; // number of bombs left
 	cin >> rounds >> bombs; cin.ignore();
+	firewallGrid.setRoundsLeft(rounds);
+	firewallGrid.setBombsLeft(bombs);
 
 #ifdef OUTPUT_GAME_DATA
 	cerr << rounds << " " << bombs << endl;
