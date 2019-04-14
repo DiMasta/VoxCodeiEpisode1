@@ -131,10 +131,6 @@ std::ostream& operator<<(std::ostream& out, const Action& action) {
 
 class Bomb {
 public:
-	// Activate
-	//void activate();
-	//void update();
-
 	/// Initialize bombs variables
 	/// @param[in] row bomb row idx
 	/// @param[in] col bombcol idx
@@ -143,6 +139,12 @@ public:
 	/// Update the timer of the bomb, decrease it
 	/// @return true if the bomb explodes
 	bool update();
+
+	/// Simulate the bomb explotion in the simulation grid
+	/// @param[in/out] simulationGrid reference to the simulation grid
+	/// @param[out] explodedBombs if other bomb is triggered add it for explotion
+	/// @param[out] explodedBombsCount if other bomb is triggered increase the triggered bombs
+	void explode(Cell (&simulationGrid)[MAX_HEIGHT][MAX_WIDTH], Bomb (&explodedBombs)[MAX_BOMBS], int& explodedBombsCount) const;
 
 private:
 	int row; ///< bomb row idx
@@ -168,6 +170,37 @@ void Bomb::init(int row, int col) {
 bool Bomb::update() {
 	--roundsLeft;
 	return 0 == roundsLeft;
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Bomb::explode(Cell (&simulationGrid)[MAX_HEIGHT][MAX_WIDTH], Bomb (&explodedBombs)[MAX_BOMBS], int& explodedBombsCount) const {
+	for (const Direction direction : directions) {
+		int rowRange = row;
+		int colRange = col;
+
+		// Aplly bomb range
+		for (int range = 0; range < BOMB_RADIUS; ++range) {
+			rowRange += MOVE_IN_ROWS[static_cast<int>(direction)];
+			colRange += MOVE_IN_COLS[static_cast<int>(direction)];
+
+			Cell& cell = simulationGrid[rowRange][colRange];
+
+			if (WALL == cell) {
+				break; // Continue with next direction
+			}
+			else if (SURVEILLANCE_NODE & cell) {
+				cell &= ~SURVEILLANCE_NODE; // destroy node
+			}
+			else if (BOMB_FLAG & cell) {
+				explodedBombs[explodedBombsCount++].init(rowRange, colRange); // Init new bomb, no matter the timer, it will be activated anyway
+				break; // Do not continue this bomb's explotion, activated bomb will have similar range
+			}
+		}
+	}
+
+	simulationGrid[row][col] &= ~BOMB_FLAG; // Clear the bomb from the simulation grid
 }
 
 //-------------------------------------------------------------------------------------------------------------
@@ -524,17 +557,19 @@ void Grid::simulate(const vector<int>& actionsToPerform) {
 
 	int actionToPerformIdx = 0;
 	for (int roundIdx = 0; roundIdx < roundsLeft; ++roundIdx) {
-		const int actionIdx = actionsToPerform[actionToPerformIdx];
-		const Action& actionToPerform = actions[actionIdx];
+		if (actionToPerformIdx < actionsToPerform.size()) {
+			const int actionIdx = actionsToPerform[actionToPerformIdx];
+			const Action& actionToPerform = actions[actionIdx];
 
-		if (couldPlaceBomb(actionToPerform)) {
-			placeBomb(actionToPerform);
-		
-			actionsBestSequence[solutionActionsCount++] = actionToPerformIdx;
-			++actionToPerformIdx;
-		}
-		else {
-			actionsBestSequence[solutionActionsCount++] = INVALID_ID; // Wait action
+			if (couldPlaceBomb(actionToPerform)) {
+				placeBomb(actionToPerform);
+
+				actionsBestSequence[solutionActionsCount++] = actionToPerformIdx;
+				++actionToPerformIdx;
+			}
+			else {
+				actionsBestSequence[solutionActionsCount++] = INVALID_ID; // Wait action
+			}
 		}
 
 		bombsTick();
@@ -579,19 +614,20 @@ void Grid::placeBomb(const Action& action) {
 //*************************************************************************************************************
 
 void Grid::bombsTick() {
-	int explodedBombs[MAX_BOMBS]; // Bombs indecies which are exploding this turn
+	Bomb explodedBombs[MAX_BOMBS]; // Bombs indecies which are exploding this turn
 	int explodedBombsCount = 0;
 
 	// Go through all placed bombs, update their timers
 	for (int bombIdx = 0; bombIdx < bombsCount; ++bombIdx) {
 		if (bombs[bombIdx].update()) {
-			explodedBombs[explodedBombsCount++] = bombIdx;
+			explodedBombs[explodedBombsCount++] = bombs[bombIdx];
 		}
 	}
 
-	// Explode bombs with 0 timers
-
-	// Explode bombs which are triggered by other bombs
+	// Explode bombs with 0 timers, explode bombs which are triggered by other bombs
+	for (int bombIdx = 0; bombIdx < explodedBombsCount; ++bombIdx) {
+		explodedBombs[bombIdx].explode(simulationGrid, explodedBombs, explodedBombsCount);
+	}
 
 	// Remove bombs from simulation grid
 }
