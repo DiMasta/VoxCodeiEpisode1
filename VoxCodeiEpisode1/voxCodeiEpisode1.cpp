@@ -17,10 +17,10 @@
 
 using namespace std;
 
-#define REDIRECT_CIN_FROM_FILE
-#define REDIRECT_COUT_TO_FILE
+//#define REDIRECT_CIN_FROM_FILE
+//#define REDIRECT_COUT_TO_FILE
 //#define OUTPUT_GAME_DATA
-#define DEBUG_ONE_TURN
+//#define DEBUG_ONE_TURN
 
 const string INPUT_FILE_NAME = "input.txt";
 const string OUTPUT_FILE_NAME = "output.txt";
@@ -330,7 +330,7 @@ public:
 	/// @param[in] recursionFlags shows which actions are played so far and if a solution is found
 	/// @param[in] depth the current depth of the recursion
 	/// @param[in] actionsToPerform sequence of actions to be tested
-	void recursiveDFSActions(unsigned int recursionFlags, int depth, vector<int> actionsToPerform);
+	void recursiveDFSActions(unsigned int recursionFlags, int depth, const vector<int>& actionsToPerform);
 
 	/// Simulate the given sequence of actions, place and activate bombs taking the turns count in account
 	/// @param[in] actionsToPerform which action to take in certain order
@@ -351,6 +351,11 @@ public:
 	/// Update placed bombs, decrease their timers, if bomb reached 0 timer, explode
 	/// @return how many surveillance nodes are destroyed in the simulated turn
 	int bombsTick();
+
+	/// Get the index of the solution action for the current turn
+	/// @param[in] turnIdx the turn being maked
+	/// @return the index of the action for the current turn
+	int getSolutionActionIdx(int turnIdx) const;
 
 private:
 	/// All possible actions for the grid, including placing bombs on nodes (after thery are destroyed)
@@ -441,15 +446,15 @@ void Grid::evaluateGridCells() {
 
 				// If the nodes in range are 0 do not set the char to 0, because it is NULL and will terminate the row
 				if (surveillanceNodesInRange) {
-					cell = static_cast<Cell>(surveillanceNodesInRange);
-
-					if (cellIsSNode) {
-						cell |= S_NODE_GOOD_FOR_BOMB;
-					}
+					//cell = static_cast<Cell>(surveillanceNodesInRange);
 
 					// Ignore cells where only one node will be destroyed, not sure if this is right
 					if (surveillanceNodesInRange > 1) {
 						addAction(rowIdx, colIdx, surveillanceNodesInRange);
+
+						if (cellIsSNode) {
+							cell |= S_NODE_GOOD_FOR_BOMB;
+						}
 					}
 
 					// Only one action is needed to destroy all surveillance nodes
@@ -553,7 +558,7 @@ void Grid::dfsActions(int turnsCount) {
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::recursiveDFSActions(unsigned int recursionFlags, int depth, vector<int> actionsToPerform) {
+void Grid::recursiveDFSActions(unsigned int recursionFlags, int depth, const vector<int>& actionsToPerform) {
 	if (solutionFound) {
 		return;
 	}
@@ -571,10 +576,11 @@ void Grid::recursiveDFSActions(unsigned int recursionFlags, int depth, vector<in
 	for (int actionIdx = 0; actionIdx < actionsCount; ++actionIdx) {
 		const unsigned int actionBit = 1 << actionIdx;
 		if (!(actionBit & recursionFlags)) {
-			actionsToPerform.push_back(actionIdx);
-			recursionFlags |= actionBit;
+			const unsigned int newFlags = recursionFlags | actionBit;
+			vector<int> newActions = actionsToPerform;
+			newActions.push_back(actionIdx);
 
-			recursiveDFSActions(recursionFlags, ++depth, actionsToPerform);
+			recursiveDFSActions(newFlags, depth + 1, newActions);
 		}
 	}
 }
@@ -589,7 +595,7 @@ void Grid::simulate(const vector<int>& actionsToPerform) {
 
 	int actionToPerformIdx = 0;
 	for (int roundIdx = 0; roundIdx < roundsLeft; ++roundIdx) {
-		if (actionToPerformIdx < actionsToPerform.size()) {
+		if (actionToPerformIdx < static_cast<int>(actionsToPerform.size())) {
 			const int actionIdx = actionsToPerform[actionToPerformIdx];
 			const Action& actionToPerform = actions[actionIdx];
 
@@ -670,6 +676,13 @@ int Grid::bombsTick() {
 	return surveillanceNodesDestroyed;
 }
 
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+int Grid::getSolutionActionIdx(int turnIdx) const {
+	return actionsBestSequence[turnIdx];
+}
+
 //-------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------
@@ -739,6 +752,10 @@ void Game::gameEnd() {
 
 void Game::gameLoop() {
 	while (true) {
+		if (firewallGrid.getRoundsLeft() == turnsCount) {
+			break;
+		}
+
 		getTurnInput();
 		turnBegin();
 		makeTurn();
@@ -798,7 +815,9 @@ void Game::getTurnInput() {
 //*************************************************************************************************************
 
 void Game::turnBegin() {
-	firewallGrid.dfsActions(turnsCount);
+	if (0 == turnsCount) {
+		firewallGrid.dfsActions(turnsCount);
+	}
 }
 
 //*************************************************************************************************************
@@ -806,7 +825,7 @@ void Game::turnBegin() {
 
 void Game::makeTurn() {
 	if (firewallGrid.getSolutionFound()) {
-		cout << firewallGrid.getAction(turnsCount);
+		cout << firewallGrid.getAction(firewallGrid.getSolutionActionIdx(turnsCount));
 	}
 }
 
