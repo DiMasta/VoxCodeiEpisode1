@@ -461,6 +461,7 @@ void Grid::evaluateGridCells() {
 					if (surveillanceNodesInRange == sNodesCount && cellIsEmpty) {
 						solutionFound = true;
 						setAction(0, rowIdx, colIdx, surveillanceNodesInRange); // Overwrite first action
+						actionsBestSequence[solutionActionsCount++] = 0;
 						break;
 					}
 				}
