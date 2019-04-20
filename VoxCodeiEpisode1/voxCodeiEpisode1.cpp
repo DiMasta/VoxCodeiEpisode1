@@ -118,7 +118,7 @@ std::ostream& operator<<(std::ostream& out, const Action& action) {
 		out << WAIT;
 	}
 	else {
-		out << action.row << " " << action.col;
+		out << action.col << " " << action.row;
 	}
 
 	out << endl;
@@ -267,6 +267,10 @@ public:
 
 	bool getSolutionFound() {
 		return solutionFound;
+	}
+
+	int getSolutionActionsCount() {
+		return solutionActionsCount;
 	}
 
 	/// Set cell entry, without checking for valid coordinates, which may be a mistake
@@ -753,11 +757,12 @@ void Game::gameEnd() {
 
 void Game::gameLoop() {
 	while (true) {
-		if (firewallGrid.getRoundsLeft() == turnsCount) {
+		getTurnInput();
+
+		if (0 == firewallGrid.getRoundsLeft()) {
 			break;
 		}
 
-		getTurnInput();
 		turnBegin();
 		makeTurn();
 		turnEnd();
@@ -825,8 +830,11 @@ void Game::turnBegin() {
 //*************************************************************************************************************
 
 void Game::makeTurn() {
-	if (firewallGrid.getSolutionFound()) {
+	if (firewallGrid.getSolutionFound() && turnsCount < firewallGrid.getSolutionActionsCount()) {
 		cout << firewallGrid.getAction(firewallGrid.getSolutionActionIdx(turnsCount));
+	}
+	else {
+		cout << WAIT << endl;
 	}
 }
 
