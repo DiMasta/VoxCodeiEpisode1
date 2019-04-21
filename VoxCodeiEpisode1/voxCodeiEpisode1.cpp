@@ -19,8 +19,9 @@ using namespace std;
 
 //#define REDIRECT_CIN_FROM_FILE
 //#define REDIRECT_COUT_TO_FILE
-//#define OUTPUT_GAME_DATA
 //#define DEBUG_ONE_TURN
+//#define OUTPUT_GAME_DATA
+
 
 const string INPUT_FILE_NAME = "input.txt";
 const string OUTPUT_FILE_NAME = "output.txt";
@@ -601,16 +602,19 @@ void Grid::simulate(const vector<int>& actionsToPerform) {
 	resetForSimulation();
 
 	int surveillanceNodesDestroyed = 0;
+	int actionIdxToCheck = 0; // Update only after a bomb is placed
 
 	for (int roundIdx = 0; roundIdx < roundsLeft; ++roundIdx) {
-		if (solutionActionsCount < static_cast<int>(actionsToPerform.size())) {
-			const int actionIdx = actionsToPerform[solutionActionsCount];
+		if (actionIdxToCheck < static_cast<int>(actionsToPerform.size())) {
+			const int actionIdx = actionsToPerform[actionIdxToCheck];
 			const Action& actionToPerform = actions[actionIdx];
 
 			if (couldPlaceBomb(actionToPerform)) {
 				placeBomb(actionToPerform);
 
 				actionsBestSequence[solutionActionsCount++] = actionIdx;
+				// Action performed, move to next action
+				++actionIdxToCheck;
 			}
 			else {
 				actionsBestSequence[solutionActionsCount++] = INVALID_ID; // Wait action
@@ -645,7 +649,7 @@ void Grid::resetForSimulation() {
 bool Grid::couldPlaceBomb(const Action& action) const {
 	const Cell cell = simulationGrid[action.row][action.col];
 
-	return !(cell & S_NODE_GOOD_FOR_BOMB);
+	return !(cell & SURVEILLANCE_NODE);
 }
 
 //*************************************************************************************************************
