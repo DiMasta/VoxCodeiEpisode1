@@ -837,7 +837,13 @@ void Game::turnBegin() {
 
 void Game::makeTurn() {
 	if (firewallGrid.getSolutionFound() && turnsCount < firewallGrid.getSolutionActionsCount()) {
-		cout << firewallGrid.getAction(firewallGrid.getSolutionActionIdx(turnsCount));
+		const int actionIdx = firewallGrid.getSolutionActionIdx(turnsCount);
+		if (INVALID_IDX != actionIdx) {
+			cout << firewallGrid.getAction(actionIdx);
+		}
+		else {
+			cout << WAIT << endl;
+		}
 	}
 	else {
 		cout << WAIT << endl;
