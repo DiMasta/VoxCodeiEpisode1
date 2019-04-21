@@ -1,6 +1,6 @@
-1 0
-WAIT
-WAIT
+4 5
+7 0
+0 1
 WAIT
 WAIT
 WAIT

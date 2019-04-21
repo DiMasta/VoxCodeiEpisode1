@@ -41,7 +41,7 @@ static const int MAX_HEIGHT = 19;
 static const int MAX_WIDTH = 19;
 static const int MAX_BOMBS = 9;
 static const int MAX_ROUNDS = 19;
-static const int MAX_ACTIONS = MAX_ROUNDS * 2; // There are may be more than 19 actions to perform, could be more than needed
+static const int MAX_ACTIONS = MAX_HEIGHT * MAX_WIDTH;
 static const int BOMB_RADIUS = 3;
 static const int BOMB_ROUNDS_TO_EXPLODE = 3;
 static const unsigned int SOLUTION_FOUND_FLAG = 0b1000'0000'0000'0000'0000'0000'0000'0000;
@@ -579,6 +579,10 @@ void Grid::recursiveDFSActions(unsigned int recursionFlags, int depth, const vec
 	}
 
 	for (int actionIdx = 0; actionIdx < actionsCount; ++actionIdx) {
+		if (solutionFound) {
+			break;
+		}
+
 		const unsigned int actionBit = 1 << actionIdx;
 		if (!(actionBit & recursionFlags)) {
 			const unsigned int newFlags = recursionFlags | actionBit;
@@ -598,17 +602,15 @@ void Grid::simulate(const vector<int>& actionsToPerform) {
 
 	int surveillanceNodesDestroyed = 0;
 
-	int actionToPerformIdx = 0;
 	for (int roundIdx = 0; roundIdx < roundsLeft; ++roundIdx) {
-		if (actionToPerformIdx < static_cast<int>(actionsToPerform.size())) {
-			const int actionIdx = actionsToPerform[actionToPerformIdx];
+		if (solutionActionsCount < static_cast<int>(actionsToPerform.size())) {
+			const int actionIdx = actionsToPerform[solutionActionsCount];
 			const Action& actionToPerform = actions[actionIdx];
 
 			if (couldPlaceBomb(actionToPerform)) {
 				placeBomb(actionToPerform);
 
-				actionsBestSequence[solutionActionsCount++] = actionToPerformIdx;
-				++actionToPerformIdx;
+				actionsBestSequence[solutionActionsCount++] = actionIdx;
 			}
 			else {
 				actionsBestSequence[solutionActionsCount++] = INVALID_ID; // Wait action
