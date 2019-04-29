@@ -807,16 +807,17 @@ int Grid::getSolutionActionIdx(int turnIdx) const {
 //*************************************************************************************************************
 
 void Grid::createdSNode(int rowIdx, int colIdx) {
-	int rowNeighbour = rowIdx;
-	int colNeighbour = colIdx;
 	Direction nodeDirection = Direction::INVALID;
 
 	// Check all four neighbour cells to find from where the snode comes
 	for (const Direction direction : directions) {
+		int rowNeighbour = rowIdx;
+		int colNeighbour = colIdx;
+
 		rowNeighbour += MOVE_IN_ROWS[static_cast<int>(direction)];
 		colNeighbour += MOVE_IN_COLS[static_cast<int>(direction)];
 
-		if (colNeighbour < 0 || colNeighbour >= height || colNeighbour < 0 || colNeighbour >= width) {
+		if (rowNeighbour < 0 || rowNeighbour >= height || colNeighbour < 0 || colNeighbour >= width) {
 			continue;
 		}
 
@@ -826,16 +827,16 @@ void Grid::createdSNode(int rowIdx, int colIdx) {
 			const int colDiff = colIdx - colNeighbour;
 
 			if (rowDiff > 0) {
-				nodeDirection = Direction::RIGHT;
+				nodeDirection = Direction::DOWN;
 			}
 			else if (rowDiff < 0) {
-				nodeDirection = Direction::LEFT;
-			}
-			else if (colDiff > 0) {
 				nodeDirection = Direction::UP;
 			}
+			else if (colDiff > 0) {
+				nodeDirection = Direction::RIGHT;
+			}
 			else if (colDiff < 0) {
-				nodeDirection = Direction::DOWN;
+				nodeDirection = Direction::LEFT;
 			}
 			break;
 		}
@@ -966,10 +967,13 @@ void Game::getTurnInput() {
 		cerr << row << endl;
 #endif // OUTPUT_GAME_DATA
 
-		for (int colIdx = 0; colIdx < firewallGrid.getWidth(); ++colIdx) {
-			const bool firstTurn = (0 == turnsCount); // The initial grid is filled during the first turn
-			const Cell cell = row[colIdx];
-			firewallGrid.createCell(rowIdx, colIdx, firstTurn, cell);
+		// Only first and second turn create grids to find the movement of the nodes
+		if (0 == turnsCount || 1 == turnsCount) {
+			for (int colIdx = 0; colIdx < firewallGrid.getWidth(); ++colIdx) {
+				const bool firstTurn = (0 == turnsCount); // The initial grid is filled during the first turn
+				const Cell cell = row[colIdx];
+				firewallGrid.createCell(rowIdx, colIdx, firstTurn, cell);
+			}
 		}
 	}
 }
