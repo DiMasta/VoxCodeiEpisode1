@@ -17,8 +17,8 @@
 
 using namespace std;
 
-//#define REDIRECT_CIN_FROM_FILE
-//#define REDIRECT_COUT_TO_FILE
+#define REDIRECT_CIN_FROM_FILE
+#define REDIRECT_COUT_TO_FILE
 //#define DEBUG_ONE_TURN
 //#define OUTPUT_GAME_DATA
 
@@ -278,7 +278,8 @@ public:
 	/// @param[in] rowIdx the index of the row, where the cell will be set
 	/// @param[in] colIdx the index of the column, where the cell will be set
 	/// @param[in] cell the value for the cell, that will be set
-	void setCell(int rowIdx, int colIdx, Cell cell);
+	/// @param[in] firstTurn true if the initial grid is filled
+	void createCell(int rowIdx, int colIdx, bool firstTurn, Cell cell);
 
 	/// Get cell, without checking for valid coordinates, which may be a mistake
 	/// @param[in] rowIdx the index of the row, for the cell
@@ -369,6 +370,9 @@ private:
 	/// The sequence of the best actions
 	int actionsBestSequence[MAX_ACTIONS];
 
+	/// The initial grid, used to derive the moving directions of the nodes
+	Cell initialGrid[MAX_HEIGHT][MAX_WIDTH];
+
 	/// The original firewall grid for the game
 	Cell grid[MAX_HEIGHT][MAX_WIDTH];
 
@@ -418,15 +422,21 @@ Grid::Grid() :
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::setCell(int rowIdx, int colIdx, Cell cell) {
-	if (SURVEILLANCE_NODE == cell) {
-		++sNodesCount;
-	}
-	else if (EMPTY == cell) {
-		cell = EMPTY_FLAG;
-	}
+void Grid::createCell(int rowIdx, int colIdx, bool firstTurn, Cell cell) {
+	if (firstTurn) {
+		// TODO: this logic must be changed, to create new nodes in the array of nodes
+		if (SURVEILLANCE_NODE == cell) {
+			++sNodesCount;
+		}
+		else if (EMPTY == cell) {
+			cell = EMPTY_FLAG;
+		}
 
-	grid[rowIdx][colIdx] = cell;
+		initialGrid[rowIdx][colIdx] = cell;
+	}
+	else {
+		grid[rowIdx][colIdx] = cell;
+	}
 }
 
 //*************************************************************************************************************
@@ -792,20 +802,6 @@ void Game::getGameInput() {
 #ifdef OUTPUT_GAME_DATA
 	cerr << width << " " << height << endl;
 #endif // OUTPUT_GAME_DATA
-
-	for (int rowIdx = 0; rowIdx < height; ++rowIdx) {
-		string row; // one line of the firewall grid
-		getline(cin, row);
-
-#ifdef OUTPUT_GAME_DATA
-		cerr << row << endl;
-#endif // OUTPUT_GAME_DATA
-
-		for (int colIdx = 0; colIdx < width; ++colIdx) {
-			const Cell cell = row[colIdx];
-			firewallGrid.setCell(rowIdx, colIdx, cell);
-		}
-	}
 }
 
 //*************************************************************************************************************
@@ -821,6 +817,21 @@ void Game::getTurnInput() {
 #ifdef OUTPUT_GAME_DATA
 	cerr << rounds << " " << bombs << endl;
 #endif // OUTPUT_GAME_DATA
+
+	for (int rowIdx = 0; rowIdx < firewallGrid.getHeight(); ++rowIdx) {
+		string row; // one line of the firewall grid
+		getline(cin, row);
+
+#ifdef OUTPUT_GAME_DATA
+		cerr << row << endl;
+#endif // OUTPUT_GAME_DATA
+
+		for (int colIdx = 0; colIdx < firewallGrid.getWidth(); ++colIdx) {
+			const bool firstTurn = (0 == turnsCount); // The initial grid is filled during the first turn
+			const Cell cell = row[colIdx];
+			firewallGrid.createCell(rowIdx, colIdx, firstTurn, cell);
+		}
+	}
 }
 
 //*************************************************************************************************************
