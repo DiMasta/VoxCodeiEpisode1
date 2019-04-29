@@ -1097,7 +1097,7 @@ void Game::getTurnInput() {
 //*************************************************************************************************************
 
 void Game::turnBegin() {
-	if (turnsCount > SECOND_TURN) {
+	if (turnsCount >= SECOND_TURN) {
 		// The nodes movement is calculated, proceed with simulation
 		// The goal of the simulation is to find empty cell with the most nodes in range for bombs
 		// May be every time when updating node mark all empty cells which have access to it
