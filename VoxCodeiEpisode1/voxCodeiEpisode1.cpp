@@ -89,17 +89,17 @@ static const int MOVE_IN_COLS[DIRECTIONS_COUNT] = { 0, 0, -1, 1 };
 /// (-1, -1) represents "WAIT" action, needed when a bomb must be placed on not yet destroyed sureveillance node
 struct Action {
 	/// By default set the invalid action, that means "WAIT"
-	Action() : row(INVALID_IDX), col(INVALID_IDX), afffectedSNodesCount(0) {}
-	Action(int row, int col, int afffectedSNodesCount) : row(row), col(col), afffectedSNodesCount(afffectedSNodesCount) {}
+	Action() : row(INVALID_IDX), col(INVALID_IDX), afffectedSNodesCount(0), palcementRound(INVALID_IDX) {}
+	Action(int row, int col, int afffectedSNodesCount, int palcementRound) :
+		row(row), col(col), afffectedSNodesCount(afffectedSNodesCount), palcementRound(palcementRound) {}
 
 	/// Set the default values
 	void init();
 
 	int row; ///< where to place the bomb
 	int col; ///< where to place the bomb
-
-	/// How many surveillance nodes are affected for this cell
-	int afffectedSNodesCount;
+	int afffectedSNodesCount; ///< How many surveillance nodes are affected for this cell
+	int palcementRound; ///< The round when the bomb should be placed
 };
 
 //*************************************************************************************************************
@@ -384,7 +384,8 @@ public:
 	/// Iterate the whole grid and set for each cell how many surveillance nodes will be destroyed if a bomb is set there
 	/// This hides the risk when a bomb is detonated it changes the cell evaluation, but I think for starting marking
 	/// of the best cells to check is OK
-	void evaluateGridCells();
+	/// @param[in] simulationStartRound which turn is checked now
+	void evaluateGridCells(int simulationStartRound);
 
 	/// Count how many surveillance nodes will be affected if a bomb is placed in the cell with the given coordinates
 	/// @param[in] rowIdx the index of the row, for the cell to check
@@ -404,14 +405,16 @@ public:
 	/// @param[in] rowIdx the index of the row, to place a bomb
 	/// @param[in] colIdx the index of the column, to place a bomb
 	/// @param[in] afffectedSNodesCount how many sureveillance nodes are affected from this cell
-	void addAction(int rowIdx, int colIdx, int afffectedSNodesCount);
+	/// @param[in] palcementRound the round when the bomb should be placed
+	void addAction(int rowIdx, int colIdx, int afffectedSNodesCount, int palcementRound);
 
 	/// Ovewrite the actionIdx-th action, in which cell to place a bomb
 	/// @param[in] actionIdx action's index
 	/// @param[in] rowIdx the index of the row, to place a bomb
 	/// @param[in] colIdx the index of the column, to place a bomb
 	/// @param[in] afffectedSNodesCount how many sureveillance nodes are affected from this cell
-	void setAction(int actionIdx, int rowIdx, int colIdx, int afffectedSNodesCount);
+	/// @param[in] palcementRound the round when the bomb should be placed
+	void setAction(int actionIdx, int rowIdx, int colIdx, int afffectedSNodesCount, int palcementRound);
 
 	/// Get action with given index
 	/// @param[in] actionIdx action's index
@@ -464,8 +467,8 @@ public:
 
 	/// Move all nodes in their directions round by round and echa round track the best empty cells
 	/// If an empty cell, which reaches all nodes, is found, break the simulation and use that cell in the that round
-	/// @param[in] turnsCount how many turns are alreadu passed
-	void simulateAllRounds(int turnsCount);
+	/// @param[in] simulationStartRound how many turns are alreadu passed
+	void simulateAllRounds(int simulationStartRound);
 
 	/// Move nodes for the given round
 	void moveSNodes();
@@ -562,7 +565,7 @@ Cell Grid::getCell(int rowIdx, int colIdx) const {
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::evaluateGridCells() {
+void Grid::evaluateGridCells(int simulationStartRound) {
 	for (int rowIdx = 0; rowIdx < height; ++rowIdx) {
 		for (int colIdx = 0; colIdx < width; ++colIdx) {
 			Cell& cell = grid[rowIdx][colIdx];
@@ -570,15 +573,16 @@ void Grid::evaluateGridCells() {
 			const bool cellIsSNode = SURVEILLANCE_NODE == cell;
 
 			if (cellIsEmpty || cellIsSNode) {
+				// This the count of nodes if the bomb explodes, so the placement of the bomb should be 2 turns before this
 				const int surveillanceNodesInRange = countSurveillanceNodesInRange(rowIdx, colIdx);
 
 				// If the nodes in range are 0 do not set the char to 0, because it is NULL and will terminate the row
 				if (surveillanceNodesInRange) {
-					//cell = static_cast<Cell>(surveillanceNodesInRange);
+					const int placementRound = simulationStartRound - (BOMB_ROUNDS_TO_EXPLODE - 1);
 
 					// Ignore cells where only one node will be destroyed, not sure if this is right
 					if (surveillanceNodesInRange > 1) {
-						addAction(rowIdx, colIdx, surveillanceNodesInRange);
+						addAction(rowIdx, colIdx, surveillanceNodesInRange, placementRound);
 
 						if (cellIsSNode) {
 							cell |= S_NODE_GOOD_FOR_BOMB;
@@ -588,7 +592,7 @@ void Grid::evaluateGridCells() {
 					// Only one action is needed to destroy all surveillance nodes
 					if (surveillanceNodesInRange == sNodesCount && cellIsEmpty) {
 						solutionFound = true;
-						setAction(0, rowIdx, colIdx, surveillanceNodesInRange); // Overwrite first action
+						setAction(0, rowIdx, colIdx, surveillanceNodesInRange, placementRound); // Overwrite first action
 						actionsBestSequence[solutionActionsCount++] = 0;
 						break;
 					}
@@ -632,7 +636,7 @@ int Grid::countSurveillanceNodesInRangeForDirection(int rowIdx, int colIdx, Dire
 				break;
 			}
 
-			if ((SURVEILLANCE_NODE == cell) || (cell & S_NODE_GOOD_FOR_BOMB)) {
+			if ((SURVEILLANCE_NODE & cell) || (cell & S_NODE_GOOD_FOR_BOMB)) {
 				++affectedNodesCount;
 			}
 
@@ -649,15 +653,15 @@ int Grid::countSurveillanceNodesInRangeForDirection(int rowIdx, int colIdx, Dire
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::addAction(int rowIdx, int colIdx, int afffectedSNodesCount) {
-	actions[actionsCount++] = Action(rowIdx, colIdx, afffectedSNodesCount);
+void Grid::addAction(int rowIdx, int colIdx, int afffectedSNodesCount, int palcementRound) {
+	actions[actionsCount++] = Action(rowIdx, colIdx, afffectedSNodesCount, palcementRound);
 }
 
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::setAction(int actionIdx, int rowIdx, int colIdx, int afffectedSNodesCount) {
-	actions[actionIdx] = Action(rowIdx, colIdx, afffectedSNodesCount);
+void Grid::setAction(int actionIdx, int rowIdx, int colIdx, int afffectedSNodesCount, int palcementRound) {
+	actions[actionIdx] = Action(rowIdx, colIdx, afffectedSNodesCount, palcementRound);
 }
 
 //*************************************************************************************************************
@@ -862,10 +866,18 @@ void Grid::createdSNode(int rowIdx, int colIdx) {
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::simulateAllRounds(int turnsCount) {
-	for (int roundIdx = turnsCount; roundIdx < roundsLeft; ++roundIdx) {
+void Grid::simulateAllRounds(int simulationStartRound) {
+	for (int roundIdx = simulationStartRound; roundIdx < roundsLeft; ++roundIdx) {
 		moveSNodes();
-		// Evaluate grid, store the best actions, for each turn
+
+		// First two turns just move the nodes, so when the bomb is placed it affetct in right turn
+		if (roundIdx > simulationStartRound + (BOMB_ROUNDS_TO_EXPLODE - 1)) {
+			evaluateGridCells(simulationStartRound);
+		}
+
+		if (solutionFound) {
+			break;
+		}
 	}
 }
 
