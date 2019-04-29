@@ -42,10 +42,13 @@ static const int MAX_HEIGHT = 19;
 static const int MAX_WIDTH = 19;
 static const int MAX_BOMBS = 9;
 static const int MAX_ROUNDS = 19;
-static const int MAX_ACTIONS = MAX_HEIGHT * MAX_WIDTH;
+static const int ALL_CELLS = MAX_HEIGHT * MAX_WIDTH;
 static const int BOMB_RADIUS = 3;
 static const int BOMB_ROUNDS_TO_EXPLODE = 3;
-static const unsigned int SOLUTION_FOUND_FLAG = 0b1000'0000'0000'0000'0000'0000'0000'0000;
+
+/// Flags
+static const unsigned int SOLUTION_FOUND_FLAG =		0b1000'0000'0000'0000'0000'0000'0000'0000;
+static const unsigned int DESTROYED_FLAG =			0b0100'0000'0000'0000'0000'0000'0000'0000;
 
 typedef unsigned char Cell;
 
@@ -57,6 +60,7 @@ static const Cell BOMB_FLAG					= 0b0010'0000; // The cell is bomb
 static const Cell EMPTY_FLAG				= 0b0001'0000; // The cell is bomb
 
 enum class Direction : int {
+	INVALID = -1,
 	UP = 0,
 	DOWN = 1,
 	LEFT = 2,
@@ -233,6 +237,93 @@ int Bomb::explode(
 //-------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------
 
+/// Represents surveillance node
+class SNode {
+public:
+	/// Adding default constructor, because there will be big array of SNode default initialized
+	SNode();
+
+	void setRow(int row) { this->row = row; }
+	void setCol(int col) { this->col = col; }
+	void setRow(Direction direction) { this->direction = direction; }
+
+	int getRow() const {
+		return row;
+	}
+
+	int getCol() const {
+		return col;
+	}
+
+	Direction getDirection() const {
+		return direction;
+	}
+
+	/// Initialize the node with its correct direction and coordinates
+	/// @param[in] rowIdx surveillance node row idx
+	/// @param[in] colIdx surveillance node col idx
+	/// @param[in] direction the direction of the node, derived from the initial grid
+	void init(int rowIdx, int colIdx, Direction direction);
+
+	void setFlag(unsigned int flag);
+	void unsetFlag(unsigned int flag);
+	bool hasFlag(unsigned int flag) const;
+
+private:
+	int row; ///< surveillance node row idx
+	int col; ///< surveillance node col idx
+
+	Direction direction; ///< movement direction
+
+	unsigned int flags; ///< surveillance node state
+};
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+SNode::SNode() :
+	row(INVALID_IDX),
+	col(INVALID_IDX),
+	direction(Direction::INVALID),
+	flags(0)
+{
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void SNode::init(int rowIdx, int colIdx, Direction direction) {
+	row = rowIdx;
+	col = colIdx;
+	this->direction = direction;
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void SNode::setFlag(unsigned int flag) {
+	flags |= flag;
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void SNode::unsetFlag(unsigned int flag) {
+	flags &= ~flag;
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+bool SNode::hasFlag(unsigned int flag) const {
+	return flags & flag;
+}
+
+//-------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------
+
 class Grid {
 public:
 	Grid();
@@ -363,12 +454,20 @@ public:
 	/// @return the index of the action for the current turn
 	int getSolutionActionIdx(int turnIdx) const;
 
+	/// Create surveillance node based on the initial positions of all nodes, to derive their movement directions
+	/// @param[in] rowIdx the current row index of the surveillance node
+	/// @param[in] colIdx the current column index of the surveillance node
+	void createdSNode(int rowIdx, int colIdx);
+
 private:
+	/// All nodes scatered across the grid
+	SNode sNodes[ALL_CELLS];
+
 	/// All possible actions for the grid, including placing bombs on nodes (after thery are destroyed)
-	Action actions[MAX_ACTIONS];
+	Action actions[ALL_CELLS];
 
 	/// The sequence of the best actions
-	int actionsBestSequence[MAX_ACTIONS];
+	int actionsBestSequence[ALL_CELLS];
 
 	/// The initial grid, used to derive the moving directions of the nodes
 	Cell initialGrid[MAX_HEIGHT][MAX_WIDTH];
@@ -424,17 +523,17 @@ Grid::Grid() :
 
 void Grid::createCell(int rowIdx, int colIdx, bool firstTurn, Cell cell) {
 	if (firstTurn) {
-		// TODO: this logic must be changed, to create new nodes in the array of nodes
-		if (SURVEILLANCE_NODE == cell) {
-			++sNodesCount;
-		}
-		else if (EMPTY == cell) {
-			cell = EMPTY_FLAG;
-		}
-
 		initialGrid[rowIdx][colIdx] = cell;
 	}
 	else {
+		if (SURVEILLANCE_NODE == cell) {
+			// Create snode, based on the intial grid positions of nodes
+			createdSNode(rowIdx, colIdx);
+		}
+		else if (EMPTY == cell) {
+			cell = EMPTY_FLAG; // Using flag, beacuse '.' uses more bits in the char
+		}
+
 		grid[rowIdx][colIdx] = cell;
 	}
 }
@@ -702,6 +801,47 @@ int Grid::bombsTick() {
 
 int Grid::getSolutionActionIdx(int turnIdx) const {
 	return actionsBestSequence[turnIdx];
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Grid::createdSNode(int rowIdx, int colIdx) {
+	int rowNeighbour = rowIdx;
+	int colNeighbour = colIdx;
+	Direction nodeDirection = Direction::INVALID;
+
+	// Check all four neighbour cells to find from where the snode comes
+	for (const Direction direction : directions) {
+		rowNeighbour += MOVE_IN_ROWS[static_cast<int>(direction)];
+		colNeighbour += MOVE_IN_COLS[static_cast<int>(direction)];
+
+		if (colNeighbour < 0 || colNeighbour >= height || colNeighbour < 0 || colNeighbour >= width) {
+			continue;
+		}
+
+		const Cell& cell = initialGrid[rowNeighbour][colNeighbour];
+		if (SURVEILLANCE_NODE == cell) {
+			const int rowDiff = rowIdx - rowNeighbour;
+			const int colDiff = colIdx - colNeighbour;
+
+			if (rowDiff > 0) {
+				nodeDirection = Direction::RIGHT;
+			}
+			else if (rowDiff < 0) {
+				nodeDirection = Direction::LEFT;
+			}
+			else if (colDiff > 0) {
+				nodeDirection = Direction::UP;
+			}
+			else if (colDiff < 0) {
+				nodeDirection = Direction::DOWN;
+			}
+			break;
+		}
+	}
+
+	sNodes[sNodesCount++].init(rowIdx, colIdx, nodeDirection);
 }
 
 //-------------------------------------------------------------------------------------------------------------
