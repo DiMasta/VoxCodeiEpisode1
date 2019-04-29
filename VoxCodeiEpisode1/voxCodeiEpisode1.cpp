@@ -56,9 +56,11 @@ typedef unsigned char Cell;
 static const Cell EMPTY = '.';
 static const Cell WALL = '#';
 static const Cell S_NODE_GOOD_FOR_BOMB		= 0b1000'0000; // The cell is surveillance node, but if the node is destroyed a bomb may be placed there to destroy other surveillance nodes
-static const Cell SURVEILLANCE_NODE			= 0b0100'0000; // '@' as the input
+static const Cell SURVEILLANCE_NODE			= 0b0100'0000; // '@' as the input, This flag may not be used, since there is counter for nodes in cell
 static const Cell BOMB_FLAG					= 0b0010'0000; // The cell is bomb
-static const Cell EMPTY_FLAG				= 0b0001'0000; // The cell is bomb
+static const Cell EMPTY_FLAG				= 0b0001'0000; // The cell is empty
+static const Cell S_NODES_IN_CELL_MASK		= 0b0000'0011; // Store how many surveillance nodes are in cell, in the last 2 bits of the cell
+
 
 enum class Direction : int {
 	INVALID = -1,
@@ -861,8 +863,9 @@ void Grid::createdSNode(int rowIdx, int colIdx) {
 //*************************************************************************************************************
 
 void Grid::simulateAllRounds(int turnsCount) {
-	for (int roundIdx = turnsCount + 1; roundIdx < roundsLeft; ++roundIdx) {
+	for (int roundIdx = turnsCount; roundIdx < roundsLeft; ++roundIdx) {
 		moveSNodes();
+		// Evaluate grid, store the best actions, for each turn
 	}
 }
 
@@ -886,7 +889,14 @@ void Grid::moveSNode(int sNodeIdx) {
 		const int sNodeRow = sNode.getRow();
 		const int sNodeCol = sNode.getCol();
 
-		grid[sNodeRow][sNodeCol] &= ~SURVEILLANCE_NODE; // Remove form current position
+		Cell& currentCell = grid[sNodeRow][sNodeCol];
+		Cell sNodesInCell = S_NODES_IN_CELL_MASK & currentCell;
+		if (sNodesInCell > 0) {
+			currentCell |= --sNodesInCell;
+		}
+		else {
+			currentCell = EMPTY_FLAG;
+		}
 
 		int newRow = sNodeRow + MOVE_IN_ROWS[static_cast<int>(sNodeDirection)];
 		int newCol = sNodeCol + MOVE_IN_COLS[static_cast<int>(sNodeDirection)];
@@ -928,7 +938,11 @@ void Grid::moveSNode(int sNodeIdx) {
 		sNode.setRow(newRow);
 		sNode.setCol(newCol);
 		sNode.setDirection(sNodeDirection);
-		grid[newRow][newCol] |= SURVEILLANCE_NODE; // Set moved node
+
+		Cell& newCell = grid[newRow][newCol];
+		Cell sNodesInNewCell = S_NODES_IN_CELL_MASK & newCell;
+		newCell = SURVEILLANCE_NODE;
+		newCell |= ++sNodesInNewCell;
 	}
 }
 
@@ -986,15 +1000,6 @@ void Game::initGame() {
 //*************************************************************************************************************
 
 void Game::gameBegin() {
-	if (turnsCount > SECOND_TURN) {
-		// The nodes movement is calculated, proceed with simulation
-		// The goal of the simulation is to find empty cell with the most nodes in range for bombs
-		// May be every time when updating node mark all empty cells which have access to it
-		// And at the end of each round simulation perform only one 2d traversal of the grid to find the best empty cells
-
-		firewallGrid.simulateAllRounds(turnsCount);
-	}
-
 	//firewallGrid.evaluateGridCells();
 	//firewallGrid.sortActions();
 }
@@ -1078,9 +1083,18 @@ void Game::getTurnInput() {
 //*************************************************************************************************************
 
 void Game::turnBegin() {
-	if (0 == turnsCount) {
-		firewallGrid.dfsActions(turnsCount);
+	if (turnsCount > SECOND_TURN) {
+		// The nodes movement is calculated, proceed with simulation
+		// The goal of the simulation is to find empty cell with the most nodes in range for bombs
+		// May be every time when updating node mark all empty cells which have access to it
+		// And at the end of each round simulation perform only one 2d traversal of the grid to find the best empty cells
+
+		firewallGrid.simulateAllRounds(turnsCount);
 	}
+
+	//if (0 == turnsCount) {
+	//	firewallGrid.dfsActions(turnsCount);
+	//}
 }
 
 //*************************************************************************************************************
