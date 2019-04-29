@@ -17,8 +17,8 @@
 
 using namespace std;
 
-#define REDIRECT_CIN_FROM_FILE
-#define REDIRECT_COUT_TO_FILE
+//#define REDIRECT_CIN_FROM_FILE
+//#define REDIRECT_COUT_TO_FILE
 //#define DEBUG_ONE_TURN
 //#define OUTPUT_GAME_DATA
 
@@ -871,8 +871,8 @@ void Grid::simulateAllRounds(int simulationStartRound) {
 		moveSNodes();
 
 		// First two turns just move the nodes, so when the bomb is placed it affetct in right turn
-		if (roundIdx > simulationStartRound + (BOMB_ROUNDS_TO_EXPLODE - 1)) {
-			evaluateGridCells(simulationStartRound);
+		if (roundIdx >= simulationStartRound + (BOMB_ROUNDS_TO_EXPLODE - 1)) {
+			evaluateGridCells(roundIdx);
 		}
 
 		if (solutionFound) {
@@ -903,11 +903,9 @@ void Grid::moveSNode(int sNodeIdx) {
 
 		Cell& currentCell = grid[sNodeRow][sNodeCol];
 		Cell sNodesInCell = S_NODES_IN_CELL_MASK & currentCell;
-		if (sNodesInCell > 0) {
-			currentCell |= --sNodesInCell;
-		}
-		else {
-			currentCell = EMPTY_FLAG;
+		currentCell = EMPTY_FLAG;
+		if (sNodesInCell > 1) {
+			currentCell &= ~S_NODES_IN_CELL_MASK | (--sNodesInCell);
 		}
 
 		int newRow = sNodeRow + MOVE_IN_ROWS[static_cast<int>(sNodeDirection)];
@@ -986,13 +984,17 @@ private:
 
 	/// The game grid
 	Grid firewallGrid;
+
+	/// Index of the action to perform, when the round for the action is reached
+	int actionIdx;
 };
 
 //*************************************************************************************************************
 //*************************************************************************************************************
 
 Game::Game() :
-	turnsCount(0) 
+	turnsCount(0),
+	actionIdx(0)
 {
 }
 
@@ -1113,10 +1115,11 @@ void Game::turnBegin() {
 //*************************************************************************************************************
 
 void Game::makeTurn() {
-	if (firewallGrid.getSolutionFound() && turnsCount < firewallGrid.getSolutionActionsCount()) {
-		const int actionIdx = firewallGrid.getSolutionActionIdx(turnsCount);
-		if (INVALID_IDX != actionIdx) {
-			cout << firewallGrid.getAction(actionIdx);
+	if (firewallGrid.getSolutionFound()) {
+		const Action& action = firewallGrid.getAction(actionIdx);
+		if (action.palcementRound == turnsCount) {
+			cout << action;
+			++actionIdx;
 		}
 		else {
 			cout << WAIT << endl;
