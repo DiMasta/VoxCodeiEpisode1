@@ -45,6 +45,7 @@ static const int MAX_ROUNDS = 19;
 static const int ALL_CELLS = MAX_HEIGHT * MAX_WIDTH;
 static const int BOMB_RADIUS = 3;
 static const int BOMB_ROUNDS_TO_EXPLODE = 3;
+static const int SECOND_TURN = 1;
 
 /// Flags
 static const unsigned int SOLUTION_FOUND_FLAG =		0b1000'0000'0000'0000'0000'0000'0000'0000;
@@ -245,7 +246,7 @@ public:
 
 	void setRow(int row) { this->row = row; }
 	void setCol(int col) { this->col = col; }
-	void setRow(Direction direction) { this->direction = direction; }
+	void setDirection(Direction direction) { this->direction = direction; }
 
 	int getRow() const {
 		return row;
@@ -458,6 +459,17 @@ public:
 	/// @param[in] rowIdx the current row index of the surveillance node
 	/// @param[in] colIdx the current column index of the surveillance node
 	void createdSNode(int rowIdx, int colIdx);
+
+	/// Move all nodes in their directions round by round and echa round track the best empty cells
+	/// If an empty cell, which reaches all nodes, is found, break the simulation and use that cell in the that round
+	/// @param[in] turnsCount how many turns are alreadu passed
+	void simulateAllRounds(int turnsCount);
+
+	/// Move nodes for the given round
+	void moveSNodes();
+
+	/// First unset the current cell to be surveillance node, then set the new cell
+	void moveSNode(int sNodeIdx);
 
 private:
 	/// All nodes scatered across the grid
@@ -845,6 +857,81 @@ void Grid::createdSNode(int rowIdx, int colIdx) {
 	sNodes[sNodesCount++].init(rowIdx, colIdx, nodeDirection);
 }
 
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Grid::simulateAllRounds(int turnsCount) {
+	for (int roundIdx = turnsCount + 1; roundIdx < roundsLeft; ++roundIdx) {
+		moveSNodes();
+	}
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Grid::moveSNodes() {
+	for (int sNodeIdx = 0; sNodeIdx < sNodesCount; ++sNodeIdx) {
+		moveSNode(sNodeIdx);
+	}
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Grid::moveSNode(int sNodeIdx) {
+	SNode& sNode = sNodes[sNodeIdx];
+	Direction sNodeDirection = sNode.getDirection();
+
+	if (Direction::INVALID != sNodeDirection) {
+		const int sNodeRow = sNode.getRow();
+		const int sNodeCol = sNode.getCol();
+
+		grid[sNodeRow][sNodeCol] &= ~SURVEILLANCE_NODE; // Remove form current position
+
+		int newRow = sNodeRow + MOVE_IN_ROWS[static_cast<int>(sNodeDirection)];
+		int newCol = sNodeCol + MOVE_IN_COLS[static_cast<int>(sNodeDirection)];
+
+		bool changeDirection = false;
+		if (newRow < 0 || newRow >= height || newCol < 0 || newCol >= width) {
+			changeDirection = true;
+		}
+
+		if (!changeDirection) {
+			const Cell& cell = grid[newRow][newCol];
+			changeDirection = cell == WALL;
+		}
+
+		if (changeDirection) {
+			switch (sNodeDirection) {
+				case Direction::UP: {
+					sNodeDirection = Direction::DOWN;
+					break;
+				}
+				case Direction::DOWN: {
+					sNodeDirection = Direction::UP;
+					break;
+				}
+				case Direction::LEFT: {
+					sNodeDirection = Direction::RIGHT;
+					break;
+				}
+				case Direction::RIGHT: {
+					sNodeDirection = Direction::LEFT;
+					break;
+				}
+			}
+
+			newRow = sNodeRow + MOVE_IN_ROWS[static_cast<int>(sNodeDirection)];
+			newCol = sNodeCol + MOVE_IN_COLS[static_cast<int>(sNodeDirection)];
+		}
+
+		sNode.setRow(newRow);
+		sNode.setCol(newCol);
+		sNode.setDirection(sNodeDirection);
+		grid[newRow][newCol] |= SURVEILLANCE_NODE; // Set moved node
+	}
+}
+
 //-------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------
@@ -899,8 +986,17 @@ void Game::initGame() {
 //*************************************************************************************************************
 
 void Game::gameBegin() {
-	firewallGrid.evaluateGridCells();
-	firewallGrid.sortActions();
+	if (turnsCount > SECOND_TURN) {
+		// The nodes movement is calculated, proceed with simulation
+		// The goal of the simulation is to find empty cell with the most nodes in range for bombs
+		// May be every time when updating node mark all empty cells which have access to it
+		// And at the end of each round simulation perform only one 2d traversal of the grid to find the best empty cells
+
+		firewallGrid.simulateAllRounds(turnsCount);
+	}
+
+	//firewallGrid.evaluateGridCells();
+	//firewallGrid.sortActions();
 }
 
 //*************************************************************************************************************
@@ -968,7 +1064,7 @@ void Game::getTurnInput() {
 #endif // OUTPUT_GAME_DATA
 
 		// Only first and second turn create grids to find the movement of the nodes
-		if (0 == turnsCount || 1 == turnsCount) {
+		if (turnsCount <= SECOND_TURN) {
 			for (int colIdx = 0; colIdx < firewallGrid.getWidth(); ++colIdx) {
 				const bool firstTurn = (0 == turnsCount); // The initial grid is filled during the first turn
 				const Cell cell = row[colIdx];
