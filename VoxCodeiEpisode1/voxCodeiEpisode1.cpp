@@ -22,7 +22,6 @@ using namespace std;
 //#define DEBUG_ONE_TURN
 //#define OUTPUT_GAME_DATA
 
-
 const string INPUT_FILE_NAME = "input.txt";
 const string OUTPUT_FILE_NAME = "output.txt";
 
@@ -476,6 +475,11 @@ public:
 	/// First unset the current cell to be surveillance node, then set the new cell
 	void moveSNode(int sNodeIdx);
 
+	/// Extract the infromation for the count of the surveillance nodes in the given cell
+	/// @param[in] cell the cell to check
+	/// @return the count of surveilllance nodes in the cell
+	int getCellSNodesCount(const Cell& cell) const;
+
 private:
 	/// All nodes scatered across the grid
 	SNode sNodes[ALL_CELLS];
@@ -568,11 +572,11 @@ Cell Grid::getCell(int rowIdx, int colIdx) const {
 void Grid::evaluateGridCells(int simulationStartRound) {
 	for (int rowIdx = 0; rowIdx < height; ++rowIdx) {
 		for (int colIdx = 0; colIdx < width; ++colIdx) {
-			Cell& cell = grid[rowIdx][colIdx];
-			const bool cellIsEmpty = EMPTY_FLAG == cell;
-			const bool cellIsSNode = SURVEILLANCE_NODE == cell;
+			const Cell& cell = grid[rowIdx][colIdx];
 
-			if (cellIsEmpty || cellIsSNode) {
+			// Consider empty and surveillance node as possible places for bombs
+			// Now snodes moves so in previous turns bomb may be placed on that cell(if it is empty on that turn)
+			if (WALL != cell) {
 				// This the count of nodes if the bomb explodes, so the placement of the bomb should be 2 turns before this
 				const int surveillanceNodesInRange = countSurveillanceNodesInRange(rowIdx, colIdx);
 
@@ -583,14 +587,10 @@ void Grid::evaluateGridCells(int simulationStartRound) {
 					// Ignore cells where only one node will be destroyed, not sure if this is right
 					if (surveillanceNodesInRange > 1) {
 						addAction(rowIdx, colIdx, surveillanceNodesInRange, placementRound);
-
-						if (cellIsSNode) {
-							cell |= S_NODE_GOOD_FOR_BOMB;
-						}
 					}
 
 					// Only one action is needed to destroy all surveillance nodes
-					if (surveillanceNodesInRange == sNodesCount && cellIsEmpty) {
+					if (surveillanceNodesInRange == sNodesCount) {
 						solutionFound = true;
 						setAction(0, rowIdx, colIdx, surveillanceNodesInRange, placementRound); // Overwrite first action
 						actionsBestSequence[solutionActionsCount++] = 0;
@@ -610,7 +610,8 @@ void Grid::evaluateGridCells(int simulationStartRound) {
 //*************************************************************************************************************
 
 int Grid::countSurveillanceNodesInRange(int rowIdx, int colIdx) const {
-	int affectedNodesCount = 0;
+	// If the current cell contains surveillance count them
+	int affectedNodesCount = getCellSNodesCount(getCell(rowIdx, colIdx));
 
 	for (const Direction direction : directions) {
 		affectedNodesCount += countSurveillanceNodesInRangeForDirection(rowIdx, colIdx, direction);
@@ -636,11 +637,7 @@ int Grid::countSurveillanceNodesInRangeForDirection(int rowIdx, int colIdx, Dire
 				break;
 			}
 
-			if ((SURVEILLANCE_NODE & cell) || (cell & S_NODE_GOOD_FOR_BOMB)) {
-				++affectedNodesCount;
-			}
-
-			// Do not considering other bombs or empty cells
+			affectedNodesCount += getCellSNodesCount(cell);
 		}
 		else {
 			break;
@@ -954,6 +951,19 @@ void Grid::moveSNode(int sNodeIdx) {
 		newCell = SURVEILLANCE_NODE;
 		newCell |= ++sNodesInNewCell;
 	}
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+int Grid::getCellSNodesCount(const Cell& cell) const {
+	int sNodesCount = 0;
+
+	if (SURVEILLANCE_NODE & cell) {
+		sNodesCount = static_cast<int>(cell & S_NODES_IN_CELL_MASK);
+	}
+
+	return sNodesCount;
 }
 
 //-------------------------------------------------------------------------------------------------------------

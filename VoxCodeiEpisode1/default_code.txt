@@ -11,6 +11,8 @@ int main() {
     cin >> width >> height; cin.ignore();
     cerr << width << ' ' << height << endl;
 
+    int turnsCount = 0;
+    
     // game loop
     while (1) {
         int rounds; // number of rounds left before the end of the game
@@ -25,5 +27,7 @@ int main() {
         }
 
         cout << "WAIT" << endl;
+        
+        ++turnsCount;
     }
 }
