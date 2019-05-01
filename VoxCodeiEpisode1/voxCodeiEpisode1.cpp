@@ -900,9 +900,13 @@ void Grid::moveSNode(int sNodeIdx) {
 
 		Cell& currentCell = grid[sNodeRow][sNodeCol];
 		Cell sNodesInCell = S_NODES_IN_CELL_MASK & currentCell;
-		currentCell = EMPTY_FLAG;
+		
 		if (sNodesInCell > 1) {
-			currentCell &= ~S_NODES_IN_CELL_MASK | (--sNodesInCell);
+			currentCell = SURVEILLANCE_NODE;
+			currentCell |= (--sNodesInCell);
+		}
+		else {
+			currentCell = EMPTY_FLAG;
 		}
 
 		int newRow = sNodeRow + MOVE_IN_ROWS[static_cast<int>(sNodeDirection)];
