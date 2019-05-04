@@ -268,6 +268,9 @@ public:
 	/// @param[in] direction the direction of the node, derived from the initial grid
 	void init(int rowIdx, int colIdx, Direction direction);
 
+	/// Reset to node to its initial state
+	void reset();
+
 	void setFlag(unsigned int flag);
 	void unsetFlag(unsigned int flag);
 	bool hasFlag(unsigned int flag) const;
@@ -277,6 +280,11 @@ private:
 	int col; ///< surveillance node col idx
 
 	Direction direction; ///< movement direction
+
+	/// Initial surveillance node properties, used to reset the node after best turns are gathered
+	int initialRow;
+	int initialCol;
+	Direction initialDirection;
 
 	unsigned int flags; ///< surveillance node state
 };
@@ -299,6 +307,19 @@ void SNode::init(int rowIdx, int colIdx, Direction direction) {
 	row = rowIdx;
 	col = colIdx;
 	this->direction = direction;
+
+	initialRow = rowIdx;
+	initialCol = colIdx;
+	initialDirection = direction;
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void SNode::reset() {
+	row = initialRow;
+	col = initialCol;
+	direction = initialDirection;
 }
 
 //*************************************************************************************************************
@@ -739,29 +760,48 @@ void Grid::simulate(int turnIdx, const vector<int>& actionsToPerform) {
 	resetForSimulation();
 
 	int surveillanceNodesDestroyed = 0;
-	int actionIdxToCheck = 0; // Update only after a bomb is placed
+	//int actionIdxToCheck = 0; // Update only after a bomb is placed
 
 	for (int roundIdx = turnIdx; roundIdx < roundsLeft; ++roundIdx) {
-		// TODO: move nodes each simulation round
-		moveSNodes(simulationGrid);
+		//if (actionIdxToCheck < static_cast<int>(actionsToPerform.size())) {
+		//	const int actionIdx = actionsToPerform[actionIdxToCheck];
+		//	const Action& actionToPerform = actions[actionIdx];
+		//
+		//	if (couldPlaceBomb(actionToPerform)) {
+		//		placeBomb(actionToPerform);
+		//
+		//		actionsBestSequence[solutionActionsCount++] = actionIdx;
+		//		// Action performed, move to next action
+		//		++actionIdxToCheck;
+		//	}
+		//	else {
+		//		actionsBestSequence[solutionActionsCount++] = INVALID_ID; // Wait action
+		//	}
+		//}
 
-		if (actionIdxToCheck < static_cast<int>(actionsToPerform.size())) {
-			const int actionIdx = actionsToPerform[actionIdxToCheck];
-			const Action& actionToPerform = actions[actionIdx];
-
-			if (couldPlaceBomb(actionToPerform)) {
-				placeBomb(actionToPerform);
-
-				actionsBestSequence[solutionActionsCount++] = actionIdx;
-				// Action performed, move to next action
-				++actionIdxToCheck;
-			}
-			else {
-				actionsBestSequence[solutionActionsCount++] = INVALID_ID; // Wait action
+		int actionIdxToCheck = INVALID_IDX;
+		for (int actionIdx : actionsToPerform) {
+			if (roundIdx == actions[actionIdx].palcementRound) {
+				actionIdxToCheck = actionIdx;
+				break;
 			}
 		}
 
+		actionsBestSequence[solutionActionsCount] = INVALID_ID; // Wait action
+
+		if (INVALID_IDX != actionIdxToCheck) {
+			const Action& actionToPerform = actions[actionIdxToCheck];
+
+			if (couldPlaceBomb(actionToPerform)) {
+				placeBomb(actionToPerform);
+				actionsBestSequence[solutionActionsCount] = actionIdxToCheck;
+			}
+		}
+
+		++solutionActionsCount;
+
 		surveillanceNodesDestroyed += bombsTick();
+		moveSNodes(simulationGrid);
 	}
 
 	if (surveillanceNodesDestroyed == sNodesCount) {
@@ -777,6 +817,10 @@ void Grid::resetForSimulation() {
 		for (int colIdx = 0; colIdx < width; ++colIdx) {
 			simulationGrid[rowIdx][colIdx] = turnGrid[rowIdx][colIdx];
 		}
+	}
+
+	for (int sNodeIdx = 0; sNodeIdx < sNodesCount; ++sNodeIdx) {
+		sNodes[sNodeIdx].reset();
 	}
 
 	solutionActionsCount = 0;
