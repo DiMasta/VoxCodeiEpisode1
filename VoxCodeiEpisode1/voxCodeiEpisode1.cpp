@@ -17,8 +17,8 @@
 
 using namespace std;
 
-//#define REDIRECT_CIN_FROM_FILE
-//#define REDIRECT_COUT_TO_FILE
+#define REDIRECT_CIN_FROM_FILE
+#define REDIRECT_COUT_TO_FILE
 //#define DEBUG_ONE_TURN
 //#define OUTPUT_GAME_DATA
 
@@ -42,6 +42,7 @@ static const int MAX_WIDTH = 19;
 static const int MAX_BOMBS = 9;
 static const int MAX_ROUNDS = 19;
 static const int ALL_CELLS = MAX_HEIGHT * MAX_WIDTH;
+static const int MAX_ACTIONS_COUNT = ALL_CELLS * 4;
 static const int BOMB_RADIUS = 3;
 static const int BOMB_ROUNDS_TO_EXPLODE = 3;
 static const int SECOND_TURN = 1;
@@ -370,9 +371,10 @@ public:
 	/// Set cell entry, without checking for valid coordinates, which may be a mistake
 	/// @param[in] rowIdx the index of the row, where the cell will be set
 	/// @param[in] colIdx the index of the column, where the cell will be set
+	/// @param[in] tunrIdx the current turn index
 	/// @param[in] cell the value for the cell, that will be set
 	/// @param[in] firstTurn true if the initial grid is filled
-	void createCell(int rowIdx, int colIdx, bool firstTurn, Cell cell);
+	void createCell(int rowIdx, int colIdx, int turnIdx, Cell cell);
 
 	/// Get cell, without checking for valid coordinates, which may be a mistake
 	/// @param[in] rowIdx the index of the row, for the cell
@@ -425,18 +427,20 @@ public:
 
 	/// Perform actions using DFS, check all possible actions combination until solution is found or max depth is reached
 	/// when max depth(leave) is reached simulate all gathered actions
-	/// @param[in] turnsCount the current turn index
-	void dfsActions(int turnsCount);
+	/// @param[in] tunrIdx the current turn index
+	void dfsActions(int turnIdx);
 
 	/// Perform recursion to generate all actions combinations, at the bottom of the recursion simulate the action sequance
+	/// @param[in] tunrIdx the current turn index
 	/// @param[in] recursionFlags shows which actions are played so far and if a solution is found
 	/// @param[in] depth the current depth of the recursion
 	/// @param[in] actionsToPerform sequence of actions to be tested
-	void recursiveDFSActions(unsigned int recursionFlags, int depth, const vector<int>& actionsToPerform);
+	void recursiveDFSActions(int turnIdx, unsigned int recursionFlags, int depth, const vector<int>& actionsToPerform);
 
 	/// Simulate the given sequence of actions, place and activate bombs taking the turns count in account
+	/// @param[in] tunrIdx the current turn index
 	/// @param[in] actionsToPerform which action to take in certain order
-	void simulate(const vector<int>& actionsToPerform);
+	void simulate(int turnIdx, const vector<int>& actionsToPerform);
 
 	/// Reset firewall grid to its original state from the beginning of the turn
 	void resetForSimulation();
@@ -485,7 +489,7 @@ private:
 	SNode sNodes[ALL_CELLS];
 
 	/// All possible actions for the grid, including placing bombs on nodes (after thery are destroyed)
-	Action actions[ALL_CELLS];
+	Action actions[MAX_ACTIONS_COUNT];
 
 	/// The sequence of the best actions
 	int actionsBestSequence[ALL_CELLS];
@@ -498,6 +502,9 @@ private:
 
 	/// Grid used to simulate actions, bombs placing and activation
 	Cell simulationGrid[MAX_HEIGHT][MAX_WIDTH];
+
+	/// The input grid for each turn
+	Cell turnGrid[MAX_HEIGHT][MAX_WIDTH];
 
 	/// Bombs spread throug the simulation grid
 	Bomb bombs[MAX_BOMBS];
@@ -542,11 +549,12 @@ Grid::Grid() :
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::createCell(int rowIdx, int colIdx, bool firstTurn, Cell cell) {
-	if (firstTurn) {
+void Grid::createCell(int rowIdx, int colIdx, int turnIdx, Cell cell) {
+	if (0 == turnIdx) {
 		initialGrid[rowIdx][colIdx] = cell;
 	}
-	else {
+
+	if (SECOND_TURN == turnIdx) {
 		if (SURVEILLANCE_NODE == cell) {
 			// Create snode, based on the intial grid positions of nodes
 			createdSNode(rowIdx, colIdx);
@@ -557,6 +565,9 @@ void Grid::createCell(int rowIdx, int colIdx, bool firstTurn, Cell cell) {
 
 		grid[rowIdx][colIdx] = cell;
 	}
+
+	// Every turn fill the turn grid
+	turnGrid[rowIdx][colIdx] = cell;
 }
 
 //*************************************************************************************************************
@@ -672,23 +683,23 @@ const Action& Grid::getAction(int actionIdx) const {
 //*************************************************************************************************************
 
 void Grid::sortActions() {
-	sort(begin(actions), end(actions), biggestAction);
+	sort(actions, actions + actionsCount, biggestAction);
 }
 
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::dfsActions(int turnsCount) {
+void Grid::dfsActions(int turnIdx) {
 	vector<int> actionsToPerform;
 	actionsToPerform.reserve(actionsCount);
 
-	recursiveDFSActions(0, 0, actionsToPerform);
+	recursiveDFSActions(turnIdx, 0, 0, actionsToPerform);
 }
 
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::recursiveDFSActions(unsigned int recursionFlags, int depth, const vector<int>& actionsToPerform) {
+void Grid::recursiveDFSActions(int turnIdx, unsigned int recursionFlags, int depth, const vector<int>& actionsToPerform) {
 	if (solutionFound) {
 		return;
 	}
@@ -696,7 +707,7 @@ void Grid::recursiveDFSActions(unsigned int recursionFlags, int depth, const vec
 	// Each level of the tree represent placing a bomb, no need more levels than bomb
 	// Rounds left will be taken in account when simualtion the action sequence
 	if (bombsLeft == depth) {
-		simulate(actionsToPerform);
+		simulate(turnIdx, actionsToPerform);
 		return;
 	}
 	else if (bombsLeft < depth) {
@@ -714,7 +725,7 @@ void Grid::recursiveDFSActions(unsigned int recursionFlags, int depth, const vec
 			vector<int> newActions = actionsToPerform;
 			newActions.push_back(actionIdx);
 
-			recursiveDFSActions(newFlags, depth + 1, newActions);
+			recursiveDFSActions(turnIdx, newFlags, depth + 1, newActions);
 		}
 	}
 }
@@ -722,13 +733,16 @@ void Grid::recursiveDFSActions(unsigned int recursionFlags, int depth, const vec
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::simulate(const vector<int>& actionsToPerform) {
+// TODO: use bit encoding for actions indecies
+void Grid::simulate(int turnIdx, const vector<int>& actionsToPerform) {
 	resetForSimulation();
 
 	int surveillanceNodesDestroyed = 0;
 	int actionIdxToCheck = 0; // Update only after a bomb is placed
 
-	for (int roundIdx = 0; roundIdx < roundsLeft; ++roundIdx) {
+	for (int roundIdx = turnIdx; roundIdx < roundsLeft; ++roundIdx) {
+		// TODO: move nodes each simulation round
+
 		if (actionIdxToCheck < static_cast<int>(actionsToPerform.size())) {
 			const int actionIdx = actionsToPerform[actionIdxToCheck];
 			const Action& actionToPerform = actions[actionIdx];
@@ -759,7 +773,7 @@ void Grid::simulate(const vector<int>& actionsToPerform) {
 void Grid::resetForSimulation() {
 	for (int rowIdx = 0; rowIdx < height; ++rowIdx) {
 		for (int colIdx = 0; colIdx < width; ++colIdx) {
-			simulationGrid[rowIdx][colIdx] = grid[rowIdx][colIdx];
+			simulationGrid[rowIdx][colIdx] = turnGrid[rowIdx][colIdx];
 		}
 	}
 
@@ -1028,8 +1042,6 @@ void Game::initGame() {
 //*************************************************************************************************************
 
 void Game::gameBegin() {
-	//firewallGrid.evaluateGridCells();
-	//firewallGrid.sortActions();
 }
 
 //*************************************************************************************************************
@@ -1096,13 +1108,10 @@ void Game::getTurnInput() {
 		cerr << row << endl;
 #endif // OUTPUT_GAME_DATA
 
-		// Only first and second turn create grids to find the movement of the nodes
-		if (turnsCount <= SECOND_TURN) {
-			for (int colIdx = 0; colIdx < firewallGrid.getWidth(); ++colIdx) {
-				const bool firstTurn = (0 == turnsCount); // The initial grid is filled during the first turn
-				const Cell cell = row[colIdx];
-				firewallGrid.createCell(rowIdx, colIdx, firstTurn, cell);
-			}
+		// First and second turn create additioanl grids to find the movement of the nodes
+		for (int colIdx = 0; colIdx < firewallGrid.getWidth(); ++colIdx) {
+			const Cell cell = row[colIdx];
+			firewallGrid.createCell(rowIdx, colIdx, turnsCount, cell);
 		}
 	}
 }
@@ -1111,18 +1120,17 @@ void Game::getTurnInput() {
 //*************************************************************************************************************
 
 void Game::turnBegin() {
-	if (turnsCount >= SECOND_TURN) {
+	if (turnsCount == SECOND_TURN) {
 		// The nodes movement is calculated, proceed with simulation
 		// The goal of the simulation is to find empty cell with the most nodes in range for bombs
 		// May be every time when updating node mark all empty cells which have access to it
 		// And at the end of each round simulation perform only one 2d traversal of the grid to find the best empty cells
-
 		firewallGrid.simulateAllRounds(turnsCount);
-	}
+		firewallGrid.sortActions();
 
-	//if (0 == turnsCount) {
-	//	firewallGrid.dfsActions(turnsCount);
-	//}
+		// Test dfs with unlimitted time, maybe it's not nice place to use dfs here
+		firewallGrid.dfsActions(turnsCount);
+	}
 }
 
 //*************************************************************************************************************
