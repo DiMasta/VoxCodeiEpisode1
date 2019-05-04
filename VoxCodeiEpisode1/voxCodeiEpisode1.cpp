@@ -263,8 +263,6 @@ public:
 	/// @param[in/out] simulationGrid reference to the simulation grid
 	/// @param[in] gridHeight the height of the game grid
 	/// @param[in] gridWidth the width of the game grid
-	/// @param[out] explodedBombs if other bomb is triggered add it for explotion
-	/// @param[out] explodedBombsCount if other bomb is triggered increase the triggered bombs
 	/// @return how many nodes are destroyed from this explosion
 	int explode(
 		Cell (&simulationGrid)[MAX_HEIGHT][MAX_WIDTH],
@@ -272,8 +270,8 @@ public:
 		int gridWidth,
 		SNode (&sNodes)[ALL_CELLS],
 		int sNodesCount,
-		Bomb (&explodedBombs)[MAX_BOMBS],
-		int& explodedBombsCount
+		Bomb (&bombs)[MAX_BOMBS],
+		int bombsCount
 	) const;
 
 	/// Destroy surveillnace node in the given cell, flag it as destroyed
@@ -324,8 +322,8 @@ int Bomb::explode(
 	int gridWidth,
 	SNode (&sNodes)[ALL_CELLS],
 	int sNodesCount,
-	Bomb (&explodedBombs)[MAX_BOMBS],
-	int& explodedBombsCount
+	Bomb (&bombs)[MAX_BOMBS],
+	int bombsCount
 ) const {
 	// First count the surveillance nodes in the cell where the bomb is placed
 	int destroyedNodes = destroySNode(simulationGrid[row][col], row, col, sNodes, sNodesCount);
@@ -352,7 +350,13 @@ int Bomb::explode(
 				destroyedNodes += destroySNode(cell, rowRange, colRange, sNodes, sNodesCount);
 			}
 			else if (BOMB_FLAG & cell) {
-				explodedBombs[explodedBombsCount++].init(rowRange, colRange, 0); // Init new bomb, no matter the timer, it will be activated anyway
+				for (int bombIdx = 0; bombIdx < bombsCount; ++bombIdx) {
+					Bomb& bomb = bombs[bombIdx];
+					if (bomb.row == rowRange && bomb.col == colRange) {
+						bomb.roundsLeft = 1;
+					}
+				}
+
 				break; // Do not continue this bomb's explotion in current direction, activated bomb will have similar range
 			}
 		}
@@ -881,22 +885,15 @@ void Grid::placeBomb(const Action& action) {
 //*************************************************************************************************************
 
 int Grid::bombsTick() {
-	Bomb explodedBombs[MAX_BOMBS]; // Bombs indecies which are exploding this turn
-	int explodedBombsCount = 0;
-
-	// Go through all placed bombs, update their timers
-	for (int bombIdx = 0; bombIdx < bombsCount; ++bombIdx) {
-		if (bombs[bombIdx].update()) {
-			explodedBombs[explodedBombsCount++] = bombs[bombIdx];
-		}
-	}
-
 	int surveillanceNodesDestroyed = 0;
 
-	// Explode bombs with 0 timers, explode bombs which are triggered by other bombs
-	for (int bombIdx = 0; bombIdx < explodedBombsCount; ++bombIdx) {
-		surveillanceNodesDestroyed += explodedBombs[bombIdx].explode(
-			simulationGrid,height, width, sNodes, sNodesCount, explodedBombs, explodedBombsCount);
+	// Go through all placed bombs, update their timers
+	// If a bomb triggers another bomb the newly triggered one is added after the current, so the loop will work
+	for (int bombIdx = 0; bombIdx < bombsCount; ++bombIdx) {
+		if (bombs[bombIdx].update()) {
+			surveillanceNodesDestroyed += bombs[bombIdx].explode(
+				simulationGrid, height, width, sNodes, sNodesCount, bombs, bombsCount);
+		}
 	}
 
 	return surveillanceNodesDestroyed;
