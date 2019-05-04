@@ -252,7 +252,8 @@ public:
 	/// Initialize bombs variables
 	/// @param[in] row bomb row idx
 	/// @param[in] col bombcol idx
-	void init(int row, int col);
+	/// @param[in] roundsLeft how many rounds before exploding
+	void init(int row, int col, int roundsLeft);
 
 	/// Update the timer of the bomb, decrease it
 	/// @return true if the bomb explodes
@@ -275,11 +276,16 @@ public:
 		int& explodedBombsCount
 	) const;
 
+	/// Destroy surveillnace node in the given cell, flag it as destroyed
+	/// @param[in/out] cell the cell in which the surveillance node is placed
+	/// @param[in] rowRange row of the bombs hit
+	/// @param[in] colRange col of the bombs hit
+	/// @param[in/out] sNodes the surveillnace nodes array to be updated with the destroyed node
+	/// @param[in] sNodesCount the count of the surveillnace nodes
 	int destroySNode(
 		Cell& cell,
 		int rowRange,
 		int colRange,
-		int gridWidth,
 		SNode(&sNodes)[ALL_CELLS],
 		int sNodesCount
 	) const;
@@ -295,11 +301,10 @@ private:
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Bomb::init(int row, int col) {
+void Bomb::init(int row, int col, int roundsLeft) {
 	this->row = row;
 	this->col = col;
-
-	roundsLeft = BOMB_ROUNDS_TO_EXPLODE;
+	this->roundsLeft = roundsLeft;
 }
 
 //*************************************************************************************************************
@@ -323,7 +328,7 @@ int Bomb::explode(
 	int& explodedBombsCount
 ) const {
 	// First count the surveillance nodes in the cell where the bomb is placed
-	int destroyedNodes = destroySNode(simulationGrid[row][col], row, col, gridWidth, sNodes, sNodesCount);
+	int destroyedNodes = destroySNode(simulationGrid[row][col], row, col, sNodes, sNodesCount);
 
 	for (const Direction direction : directions) {
 		int rowRange = row;
@@ -344,10 +349,10 @@ int Bomb::explode(
 				break; // Continue with next direction
 			}
 			else if (SURVEILLANCE_NODE & cell) {
-				destroyedNodes += destroySNode(cell, rowRange, colRange, gridWidth, sNodes, sNodesCount);
+				destroyedNodes += destroySNode(cell, rowRange, colRange, sNodes, sNodesCount);
 			}
 			else if (BOMB_FLAG & cell) {
-				explodedBombs[explodedBombsCount++].init(rowRange, colRange); // Init new bomb, no matter the timer, it will be activated anyway
+				explodedBombs[explodedBombsCount++].init(rowRange, colRange, 0); // Init new bomb, no matter the timer, it will be activated anyway
 				break; // Do not continue this bomb's explotion in current direction, activated bomb will have similar range
 			}
 		}
@@ -365,7 +370,6 @@ int Bomb::destroySNode(
 	Cell& cell,
 	int rowRange,
 	int colRange,
-	int gridWidth,
 	SNode(&sNodes)[ALL_CELLS],
 	int sNodesCount
 ) const {
@@ -376,7 +380,7 @@ int Bomb::destroySNode(
 	for (int sNodeIdx = 0; sNodeIdx < sNodesCount; ++sNodeIdx) {
 		SNode& sNode = sNodes[sNodeIdx];
 		if (sNode.getRow() == rowRange && sNode.getCol() == colRange) {
-			sNode.setFlag(destroyedNodes);
+			sNode.setFlag(DESTROYED_FLAG);
 		}
 	}
 
@@ -803,25 +807,8 @@ void Grid::simulate(int turnIdx, const vector<int>& actionsToPerform) {
 	resetForSimulation();
 
 	int surveillanceNodesDestroyed = 0;
-	//int actionIdxToCheck = 0; // Update only after a bomb is placed
 
 	for (int roundIdx = turnIdx; roundIdx < roundsLeft; ++roundIdx) {
-		//if (actionIdxToCheck < static_cast<int>(actionsToPerform.size())) {
-		//	const int actionIdx = actionsToPerform[actionIdxToCheck];
-		//	const Action& actionToPerform = actions[actionIdx];
-		//
-		//	if (couldPlaceBomb(actionToPerform)) {
-		//		placeBomb(actionToPerform);
-		//
-		//		actionsBestSequence[solutionActionsCount++] = actionIdx;
-		//		// Action performed, move to next action
-		//		++actionIdxToCheck;
-		//	}
-		//	else {
-		//		actionsBestSequence[solutionActionsCount++] = INVALID_ID; // Wait action
-		//	}
-		//}
-
 		int actionIdxToCheck = INVALID_IDX;
 		for (int actionIdx : actionsToPerform) {
 			if (roundIdx == actions[actionIdx].palcementRound) {
@@ -885,7 +872,7 @@ bool Grid::couldPlaceBomb(const Action& action) const {
 void Grid::placeBomb(const Action& action) {
 	Cell& cell = simulationGrid[action.row][action.col];
 	
-	bombs[bombsCount++].init(action.row, action.col);
+	bombs[bombsCount++].init(action.row, action.col, BOMB_ROUNDS_TO_EXPLODE);
 
 	cell |= BOMB_FLAG;
 }
