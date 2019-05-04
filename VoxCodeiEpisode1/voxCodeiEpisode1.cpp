@@ -17,8 +17,8 @@
 
 using namespace std;
 
-#define REDIRECT_CIN_FROM_FILE
-#define REDIRECT_COUT_TO_FILE
+//#define REDIRECT_CIN_FROM_FILE
+//#define REDIRECT_COUT_TO_FILE
 //#define DEBUG_ONE_TURN
 //#define OUTPUT_GAME_DATA
 
@@ -474,10 +474,10 @@ public:
 	void simulateAllRounds(int simulationStartRound);
 
 	/// Move nodes for the given round
-	void moveSNodes();
+	void moveSNodes(Cell(*gridToUse)[MAX_WIDTH]);
 
 	/// First unset the current cell to be surveillance node, then set the new cell
-	void moveSNode(int sNodeIdx);
+	void moveSNode(int sNodeIdx, Cell(*gridToUse)[MAX_WIDTH]);
 
 	/// Extract the infromation for the count of the surveillance nodes in the given cell
 	/// @param[in] cell the cell to check
@@ -714,6 +714,7 @@ void Grid::recursiveDFSActions(int turnIdx, unsigned int recursionFlags, int dep
 		return;
 	}
 
+	// TODO: actionsCount may become too big and that would cause problems
 	for (int actionIdx = 0; actionIdx < actionsCount; ++actionIdx) {
 		if (solutionFound) {
 			break;
@@ -742,6 +743,7 @@ void Grid::simulate(int turnIdx, const vector<int>& actionsToPerform) {
 
 	for (int roundIdx = turnIdx; roundIdx < roundsLeft; ++roundIdx) {
 		// TODO: move nodes each simulation round
+		moveSNodes(simulationGrid);
 
 		if (actionIdxToCheck < static_cast<int>(actionsToPerform.size())) {
 			const int actionIdx = actionsToPerform[actionIdxToCheck];
@@ -879,7 +881,7 @@ void Grid::createdSNode(int rowIdx, int colIdx) {
 
 void Grid::simulateAllRounds(int simulationStartRound) {
 	for (int roundIdx = simulationStartRound; roundIdx < roundsLeft; ++roundIdx) {
-		moveSNodes();
+		moveSNodes(grid);
 
 		// First two turns just move the nodes, so when the bomb is placed it affetct in right turn
 		if (roundIdx >= simulationStartRound + (BOMB_ROUNDS_TO_EXPLODE - 1)) {
@@ -895,16 +897,16 @@ void Grid::simulateAllRounds(int simulationStartRound) {
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::moveSNodes() {
+void Grid::moveSNodes(Cell(*gridToUse)[MAX_WIDTH]) {
 	for (int sNodeIdx = 0; sNodeIdx < sNodesCount; ++sNodeIdx) {
-		moveSNode(sNodeIdx);
+		moveSNode(sNodeIdx, gridToUse);
 	}
 }
 
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::moveSNode(int sNodeIdx) {
+void Grid::moveSNode(int sNodeIdx, Cell(*gridToUse)[MAX_WIDTH]) {
 	SNode& sNode = sNodes[sNodeIdx];
 	Direction sNodeDirection = sNode.getDirection();
 
@@ -912,7 +914,7 @@ void Grid::moveSNode(int sNodeIdx) {
 		const int sNodeRow = sNode.getRow();
 		const int sNodeCol = sNode.getCol();
 
-		Cell& currentCell = grid[sNodeRow][sNodeCol];
+		Cell& currentCell = gridToUse[sNodeRow][sNodeCol];
 		Cell sNodesInCell = S_NODES_IN_CELL_MASK & currentCell;
 		
 		if (sNodesInCell > 1) {
@@ -932,7 +934,7 @@ void Grid::moveSNode(int sNodeIdx) {
 		}
 
 		if (!changeDirection) {
-			const Cell& cell = grid[newRow][newCol];
+			const Cell& cell = gridToUse[newRow][newCol];
 			changeDirection = cell == WALL;
 		}
 
@@ -964,7 +966,7 @@ void Grid::moveSNode(int sNodeIdx) {
 		sNode.setCol(newCol);
 		sNode.setDirection(sNodeDirection);
 
-		Cell& newCell = grid[newRow][newCol];
+		Cell& newCell = gridToUse[newRow][newCol];
 		Cell sNodesInNewCell = S_NODES_IN_CELL_MASK & newCell;
 		newCell = SURVEILLANCE_NODE;
 		newCell |= ++sNodesInNewCell;
@@ -1129,7 +1131,7 @@ void Game::turnBegin() {
 		firewallGrid.sortActions();
 
 		// Test dfs with unlimitted time, maybe it's not nice place to use dfs here
-		firewallGrid.dfsActions(turnsCount);
+		//firewallGrid.dfsActions(turnsCount);
 	}
 }
 
