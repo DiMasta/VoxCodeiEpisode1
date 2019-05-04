@@ -17,8 +17,8 @@
 
 using namespace std;
 
-//#define REDIRECT_CIN_FROM_FILE
-//#define REDIRECT_COUT_TO_FILE
+#define REDIRECT_CIN_FROM_FILE
+#define REDIRECT_COUT_TO_FILE
 //#define DEBUG_ONE_TURN
 //#define OUTPUT_GAME_DATA
 
@@ -138,108 +138,6 @@ std::ostream& operator<<(std::ostream& out, const Action& action) {
 //-------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------
 
-class Bomb {
-public:
-	/// Initialize bombs variables
-	/// @param[in] row bomb row idx
-	/// @param[in] col bombcol idx
-	void init(int row, int col);
-
-	/// Update the timer of the bomb, decrease it
-	/// @return true if the bomb explodes
-	bool update();
-
-	/// Simulate the bomb explotion in the simulation grid
-	/// @param[in/out] simulationGrid reference to the simulation grid
-	/// @param[in] gridHeight the height of the game grid
-	/// @param[in] gridWidth the width of the game grid
-	/// @param[out] explodedBombs if other bomb is triggered add it for explotion
-	/// @param[out] explodedBombsCount if other bomb is triggered increase the triggered bombs
-	/// @return how many nodes are destroyed from this explosion
-	int explode(Cell (&simulationGrid)[MAX_HEIGHT][MAX_WIDTH],
-		int gridHeight,
-		int gridWidth, 
-		Bomb (&explodedBombs)[MAX_BOMBS],
-		int& explodedBombsCount
-	) const;
-
-private:
-	int row; ///< bomb row idx
-	int col; ///< bomb col idx
-
-	/// Starting at 3 and each round decreased, when 0 the bomb explodes
-	int roundsLeft;
-};
-
-//*************************************************************************************************************
-//*************************************************************************************************************
-
-void Bomb::init(int row, int col) {
-	this->row = row;
-	this->col = col;
-
-	roundsLeft = BOMB_ROUNDS_TO_EXPLODE;
-}
-
-//*************************************************************************************************************
-//*************************************************************************************************************
-
-bool Bomb::update() {
-	--roundsLeft;
-	return 0 == roundsLeft;
-}
-
-//*************************************************************************************************************
-//*************************************************************************************************************
-
-int Bomb::explode(
-	Cell (&simulationGrid)[MAX_HEIGHT][MAX_WIDTH],
-	int gridHeight,
-	int gridWidth,
-	Bomb (&explodedBombs)[MAX_BOMBS],
-	int& explodedBombsCount
-) const {
-	int destroyedNodes = 0;
-
-	for (const Direction direction : directions) {
-		int rowRange = row;
-		int colRange = col;
-
-		// Aplly bomb range
-		for (int range = 0; range < BOMB_RADIUS; ++range) {
-			rowRange += MOVE_IN_ROWS[static_cast<int>(direction)];
-			colRange += MOVE_IN_COLS[static_cast<int>(direction)];
-
-			if (rowRange < 0 || rowRange >= gridHeight || colRange < 0 || colRange >= gridWidth) {
-				break; // Continue with next direction
-			}
-
-			Cell& cell = simulationGrid[rowRange][colRange];
-
-			if (WALL == cell) {
-				break; // Continue with next direction
-			}
-			else if (SURVEILLANCE_NODE & cell) {
-				++destroyedNodes;
-				cell &= ~SURVEILLANCE_NODE; // destroy node
-			}
-			else if (BOMB_FLAG & cell) {
-				explodedBombs[explodedBombsCount++].init(rowRange, colRange); // Init new bomb, no matter the timer, it will be activated anyway
-				break; // Do not continue this bomb's explotion, activated bomb will have similar range
-			}
-		}
-	}
-
-	simulationGrid[row][col] &= ~BOMB_FLAG; // Clear the bomb from the simulation grid
-
-	return destroyedNodes;
-}
-
-//-------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------
-
 /// Represents surveillance node
 class SNode {
 public:
@@ -281,7 +179,7 @@ private:
 
 	Direction direction; ///< movement direction
 
-	/// Initial surveillance node properties, used to reset the node after best turns are gathered
+						 /// Initial surveillance node properties, used to reset the node after best turns are gathered
 	int initialRow;
 	int initialCol;
 	Direction initialDirection;
@@ -320,6 +218,7 @@ void SNode::reset() {
 	row = initialRow;
 	col = initialCol;
 	direction = initialDirection;
+	flags = 0;
 }
 
 //*************************************************************************************************************
@@ -341,6 +240,150 @@ void SNode::unsetFlag(unsigned int flag) {
 
 bool SNode::hasFlag(unsigned int flag) const {
 	return flags & flag;
+}
+
+//-------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------
+
+class Bomb {
+public:
+	/// Initialize bombs variables
+	/// @param[in] row bomb row idx
+	/// @param[in] col bombcol idx
+	void init(int row, int col);
+
+	/// Update the timer of the bomb, decrease it
+	/// @return true if the bomb explodes
+	bool update();
+
+	/// Simulate the bomb explotion in the simulation grid
+	/// @param[in/out] simulationGrid reference to the simulation grid
+	/// @param[in] gridHeight the height of the game grid
+	/// @param[in] gridWidth the width of the game grid
+	/// @param[out] explodedBombs if other bomb is triggered add it for explotion
+	/// @param[out] explodedBombsCount if other bomb is triggered increase the triggered bombs
+	/// @return how many nodes are destroyed from this explosion
+	int explode(
+		Cell (&simulationGrid)[MAX_HEIGHT][MAX_WIDTH],
+		int gridHeight,
+		int gridWidth,
+		SNode (&sNodes)[ALL_CELLS],
+		int sNodesCount,
+		Bomb (&explodedBombs)[MAX_BOMBS],
+		int& explodedBombsCount
+	) const;
+
+	int destroySNode(
+		Cell& cell,
+		int rowRange,
+		int colRange,
+		int gridWidth,
+		SNode(&sNodes)[ALL_CELLS],
+		int sNodesCount
+	) const;
+
+private:
+	int row; ///< bomb row idx
+	int col; ///< bomb col idx
+
+	/// Starting at 3 and each round decreased, when 0 the bomb explodes
+	int roundsLeft;
+};
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Bomb::init(int row, int col) {
+	this->row = row;
+	this->col = col;
+
+	roundsLeft = BOMB_ROUNDS_TO_EXPLODE;
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+bool Bomb::update() {
+	--roundsLeft;
+	return 0 == roundsLeft;
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+int Bomb::explode(
+	Cell (&simulationGrid)[MAX_HEIGHT][MAX_WIDTH],
+	int gridHeight,
+	int gridWidth,
+	SNode (&sNodes)[ALL_CELLS],
+	int sNodesCount,
+	Bomb (&explodedBombs)[MAX_BOMBS],
+	int& explodedBombsCount
+) const {
+	// First count the surveillance nodes in the cell where the bomb is placed
+	int destroyedNodes = destroySNode(simulationGrid[row][col], row, col, gridWidth, sNodes, sNodesCount);
+
+	for (const Direction direction : directions) {
+		int rowRange = row;
+		int colRange = col;
+
+		// Aplly bomb range
+		for (int range = 0; range < BOMB_RADIUS; ++range) {
+			rowRange += MOVE_IN_ROWS[static_cast<int>(direction)];
+			colRange += MOVE_IN_COLS[static_cast<int>(direction)];
+
+			if (rowRange < 0 || rowRange >= gridHeight || colRange < 0 || colRange >= gridWidth) {
+				break; // Continue with next direction
+			}
+
+			Cell& cell = simulationGrid[rowRange][colRange];
+
+			if (WALL == cell) {
+				break; // Continue with next direction
+			}
+			else if (SURVEILLANCE_NODE & cell) {
+				destroyedNodes += destroySNode(cell, rowRange, colRange, gridWidth, sNodes, sNodesCount);
+			}
+			else if (BOMB_FLAG & cell) {
+				explodedBombs[explodedBombsCount++].init(rowRange, colRange); // Init new bomb, no matter the timer, it will be activated anyway
+				break; // Do not continue this bomb's explotion in current direction, activated bomb will have similar range
+			}
+		}
+	}
+
+	simulationGrid[row][col] &= ~BOMB_FLAG; // Clear the bomb from the simulation grid
+
+	return destroyedNodes;
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+int Bomb::destroySNode(
+	Cell& cell,
+	int rowRange,
+	int colRange,
+	int gridWidth,
+	SNode(&sNodes)[ALL_CELLS],
+	int sNodesCount
+) const {
+	// Get count of surveillance nodes in the cell
+	int destroyedNodes = static_cast<int>(cell & S_NODES_IN_CELL_MASK);
+
+	// Mark Surveillance node as destroyed
+	for (int sNodeIdx = 0; sNodeIdx < sNodesCount; ++sNodeIdx) {
+		SNode& sNode = sNodes[sNodeIdx];
+		if (sNode.getRow() == rowRange && sNode.getCol() == colRange) {
+			sNode.setFlag(destroyedNodes);
+		}
+	}
+
+	// Remove flag from simulation grid
+	cell &= ~SURVEILLANCE_NODE;
+
+	return destroyedNodes;
 }
 
 //-------------------------------------------------------------------------------------------------------------
@@ -865,7 +908,8 @@ int Grid::bombsTick() {
 
 	// Explode bombs with 0 timers, explode bombs which are triggered by other bombs
 	for (int bombIdx = 0; bombIdx < explodedBombsCount; ++bombIdx) {
-		surveillanceNodesDestroyed += explodedBombs[bombIdx].explode(simulationGrid, height, width, explodedBombs, explodedBombsCount);
+		surveillanceNodesDestroyed += explodedBombs[bombIdx].explode(
+			simulationGrid,height, width, sNodes, sNodesCount, explodedBombs, explodedBombsCount);
 	}
 
 	return surveillanceNodesDestroyed;
@@ -954,7 +998,7 @@ void Grid::moveSNode(int sNodeIdx, Cell(*gridToUse)[MAX_WIDTH]) {
 	SNode& sNode = sNodes[sNodeIdx];
 	Direction sNodeDirection = sNode.getDirection();
 
-	if (Direction::INVALID != sNodeDirection) {
+	if (Direction::INVALID != sNodeDirection && !sNode.hasFlag(DESTROYED_FLAG)) {
 		const int sNodeRow = sNode.getRow();
 		const int sNodeCol = sNode.getCol();
 
@@ -1175,7 +1219,7 @@ void Game::turnBegin() {
 		firewallGrid.sortActions();
 
 		// Test dfs with unlimitted time, maybe it's not nice place to use dfs here
-		//firewallGrid.dfsActions(turnsCount);
+		firewallGrid.dfsActions(turnsCount);
 	}
 }
 
