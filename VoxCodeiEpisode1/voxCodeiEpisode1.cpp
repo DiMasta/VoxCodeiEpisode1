@@ -17,8 +17,8 @@
 
 using namespace std;
 
-#define REDIRECT_CIN_FROM_FILE
-#define REDIRECT_COUT_TO_FILE
+//#define REDIRECT_CIN_FROM_FILE
+//#define REDIRECT_COUT_TO_FILE
 //#define DEBUG_ONE_TURN
 //#define OUTPUT_GAME_DATA
 
@@ -43,6 +43,7 @@ static const int MAX_BOMBS = 9;
 static const int MAX_ROUNDS = 19;
 static const int ALL_CELLS = MAX_HEIGHT * MAX_WIDTH;
 static const int MAX_ACTIONS_COUNT = ALL_CELLS * 4;
+static const int MAX_ACTIONS_TO_CHECK = 32; // Limit the checked actions to the size of unsigned int
 static const int BOMB_RADIUS = 3;
 static const int BOMB_ROUNDS_TO_EXPLODE = 3;
 static const int SECOND_TURN = 1;
@@ -790,7 +791,7 @@ void Grid::recursiveDFSActions(int turnIdx, unsigned int recursionFlags, int dep
 	}
 
 	// TODO: actionsCount may become too big and that would cause problems
-	for (int actionIdx = 0; actionIdx < actionsCount; ++actionIdx) {
+	for (int actionIdx = 0; actionIdx < MAX_ACTIONS_TO_CHECK; ++actionIdx) {
 		if (solutionFound) {
 			break;
 		}
@@ -929,7 +930,7 @@ void Grid::createdSNode(int rowIdx, int colIdx) {
 			continue;
 		}
 
-		const Cell& cell = initialGrid[rowNeighbour][colNeighbour];
+		Cell& cell = initialGrid[rowNeighbour][colNeighbour];
 		if (SURVEILLANCE_NODE & cell) {
 			const int rowDiff = rowIdx - rowNeighbour;
 			const int colDiff = colIdx - colNeighbour;
@@ -946,6 +947,10 @@ void Grid::createdSNode(int rowIdx, int colIdx) {
 			else if (colDiff < 0) {
 				nodeDirection = Direction::LEFT;
 			}
+
+			// Empty the initial cell, because it is already used to determaine the direction of a node
+			cell = EMPTY_FLAG;
+
 			break;
 		}
 	}
