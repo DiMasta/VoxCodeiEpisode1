@@ -738,7 +738,9 @@ int Grid::countSurveillanceNodesInRangeForDirection(int rowIdx, int colIdx, Dire
 //*************************************************************************************************************
 
 void Grid::addAction(int rowIdx, int colIdx, int afffectedSNodesCount, int palcementRound) {
-	actions[actionsCount++] = Action(rowIdx, colIdx, afffectedSNodesCount, palcementRound);
+	if (actionsCount < MAX_ACTIONS_COUNT) {
+		actions[actionsCount++] = Action(rowIdx, colIdx, afffectedSNodesCount, palcementRound);
+	}
 }
 
 //*************************************************************************************************************
