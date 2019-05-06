@@ -17,8 +17,8 @@
 
 using namespace std;
 
-#define REDIRECT_CIN_FROM_FILE
-#define REDIRECT_COUT_TO_FILE
+//#define REDIRECT_CIN_FROM_FILE
+//#define REDIRECT_COUT_TO_FILE
 //#define DEBUG_ONE_TURN
 //#define OUTPUT_GAME_DATA
 
@@ -616,6 +616,9 @@ Grid::Grid() :
 	bombsCount(0),
 	solutionFound(false)
 {
+	for (int& bestAction : actionsBestSequence) {
+		bestAction = INVALID_IDX;
+	}
 }
 
 //*************************************************************************************************************
@@ -669,15 +672,15 @@ void Grid::evaluateGridCells(int simulationStartRound) {
 					const int placementRound = simulationStartRound - (BOMB_ROUNDS_TO_EXPLODE - 1);
 
 					// Ignore cells where only one node will be destroyed, not sure if this is right
-					if (surveillanceNodesInRange > 1) {
+					if (surveillanceNodesInRange > 1 || 1 == sNodesCount) {
 						addAction(rowIdx, colIdx, surveillanceNodesInRange, placementRound);
 					}
 
 					// Only one action is needed to destroy all surveillance nodes
 					if (surveillanceNodesInRange == sNodesCount) {
 						solutionFound = true;
-						setAction(0, rowIdx, colIdx, surveillanceNodesInRange, placementRound); // Overwrite first action
-						actionsBestSequence[solutionActionsCount++] = 0;
+						actionsBestSequence[placementRound] = actionsCount - 1; // Use the last added action
+						solutionActionsCount = placementRound + 1;
 						break;
 					}
 				}
@@ -836,11 +839,13 @@ void Grid::simulate(int turnIdx, const vector<int>& actionsToPerform) {
 		++solutionActionsCount;
 
 		surveillanceNodesDestroyed += bombsTick();
-		moveSNodes(simulationGrid);
-	}
 
-	if (surveillanceNodesDestroyed == sNodesCount) {
-		solutionFound = true;
+		if (surveillanceNodesDestroyed == sNodesCount) {
+			solutionFound = true;
+			break;
+		}
+
+		moveSNodes(simulationGrid);
 	}
 }
 
@@ -1087,17 +1092,13 @@ private:
 
 	/// The game grid
 	Grid firewallGrid;
-
-	/// Index of the action to perform, when the round for the action is reached
-	int actionIdx;
 };
 
 //*************************************************************************************************************
 //*************************************************************************************************************
 
 Game::Game() :
-	turnsCount(0),
-	actionIdx(0)
+	turnsCount(0)
 {
 }
 
@@ -1201,10 +1202,13 @@ void Game::turnBegin() {
 		// May be every time when updating node mark all empty cells which have access to it
 		// And at the end of each round simulation perform only one 2d traversal of the grid to find the best empty cells
 		firewallGrid.simulateAllRounds(turnsCount);
-		firewallGrid.sortActions();
 
-		// Test dfs with unlimitted time, maybe it's not nice place to use dfs here
-		firewallGrid.dfsActions(turnsCount);
+		if (!firewallGrid.getSolutionFound()) {
+			firewallGrid.sortActions();
+
+			// Test dfs with unlimitted time, maybe it's not nice place to use dfs here
+			firewallGrid.dfsActions(turnsCount);
+		}
 	}
 }
 
@@ -1213,13 +1217,14 @@ void Game::turnBegin() {
 
 void Game::makeTurn() {
 	if (firewallGrid.getSolutionFound()) {
-		const Action& action = firewallGrid.getAction(actionIdx);
-		if (action.palcementRound == turnsCount) {
-			cout << action;
-			++actionIdx;
+		const int solutionActionIdx = firewallGrid.getSolutionActionIdx(turnsCount);
+
+		if (INVALID_IDX == solutionActionIdx || solutionActionIdx < 0 || solutionActionIdx >= firewallGrid.getActionsCount()) {
+			cout << WAIT << endl;
 		}
 		else {
-			cout << WAIT << endl;
+			const Action& action = firewallGrid.getAction(solutionActionIdx);
+			cout << action;
 		}
 	}
 	else {
