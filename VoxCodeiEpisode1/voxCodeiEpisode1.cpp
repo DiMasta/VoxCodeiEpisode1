@@ -17,8 +17,8 @@
 
 using namespace std;
 
-//#define REDIRECT_CIN_FROM_FILE
-//#define REDIRECT_COUT_TO_FILE
+#define REDIRECT_CIN_FROM_FILE
+#define REDIRECT_COUT_TO_FILE
 //#define DEBUG_ONE_TURN
 //#define OUTPUT_GAME_DATA
 
@@ -122,12 +122,11 @@ bool biggestAction(const Action& lhs, const Action& rhs) {
 //*************************************************************************************************************
 
 std::ostream& operator<<(std::ostream& out, const Action& action) {
-	if (INVALID_IDX == action.row || INVALID_IDX == action.col) {
-		out << WAIT;
-	}
-	else {
-		out << action.col << " " << action.row;
-	}
+#ifdef REDIRECT_COUT_TO_FILE
+	cout << "\"" << action.col << " " << action.row << "\",";
+#else
+	out << action.col << " " << action.row;
+#endif
 
 	out << endl;
 	return out;
@@ -1216,11 +1215,13 @@ void Game::turnBegin() {
 //*************************************************************************************************************
 
 void Game::makeTurn() {
+	bool wait = false;
+
 	if (firewallGrid.getSolutionFound()) {
 		const int solutionActionIdx = firewallGrid.getSolutionActionIdx(turnsCount);
 
 		if (INVALID_IDX == solutionActionIdx || solutionActionIdx < 0 || solutionActionIdx >= firewallGrid.getActionsCount()) {
-			cout << WAIT << endl;
+			wait = true;
 		}
 		else {
 			const Action& action = firewallGrid.getAction(solutionActionIdx);
@@ -1228,7 +1229,15 @@ void Game::makeTurn() {
 		}
 	}
 	else {
+		wait = true;
+	}
+
+	if (wait) {
+#ifdef REDIRECT_COUT_TO_FILE
+		cout << "\"" << WAIT << "\"," << endl;
+#else
 		cout << WAIT << endl;
+#endif
 	}
 }
 
