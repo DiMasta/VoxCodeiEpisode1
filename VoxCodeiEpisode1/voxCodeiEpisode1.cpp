@@ -1132,13 +1132,13 @@ void Game::gameLoop() {
 	while (true) {
 		getTurnInput();
 
-		if (0 == firewallGrid.getRoundsLeft()) {
-			break;
-		}
-
 		turnBegin();
 		makeTurn();
 		turnEnd();
+
+		if (1 == firewallGrid.getRoundsLeft()) {
+			break;
+		}
 
 #ifdef DEBUG_ONE_TURN
 		break;
