@@ -388,8 +388,8 @@ int Bomb::destroySNode(
 		}
 	}
 
-	// Remove flag from simulation grid
-	cell &= ~SURVEILLANCE_NODE;
+	// Clear cell after the explosion
+	cell = EMPTY_FLAG;
 
 	return destroyedNodes;
 }
@@ -630,6 +630,7 @@ void Grid::createCell(int rowIdx, int colIdx, int turnIdx, Cell cell) {
 		if (SURVEILLANCE_NODE == cell) {
 			// Create snode, based on the intial grid positions of nodes
 			createdSNode(rowIdx, colIdx);
+			cell |= 1; // One node in cell
 		}
 		else if (EMPTY == cell) {
 			cell = EMPTY_FLAG; // Using flag, beacuse '.' uses more bits in the char
@@ -925,7 +926,7 @@ void Grid::createdSNode(int rowIdx, int colIdx) {
 		}
 
 		const Cell& cell = initialGrid[rowNeighbour][colNeighbour];
-		if (SURVEILLANCE_NODE == cell) {
+		if (SURVEILLANCE_NODE & cell) {
 			const int rowDiff = rowIdx - rowNeighbour;
 			const int colDiff = colIdx - colNeighbour;
 
