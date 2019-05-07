@@ -769,7 +769,7 @@ void Grid::sortActions() {
 
 void Grid::dfsActions(int turnIdx) {
 	vector<int> actionsToPerform;
-	actionsToPerform.reserve(actionsCount);
+	actionsToPerform.reserve(MAX_ACTIONS_TO_CHECK);
 
 	recursiveDFSActions(turnIdx, 0, 0, actionsToPerform);
 }
