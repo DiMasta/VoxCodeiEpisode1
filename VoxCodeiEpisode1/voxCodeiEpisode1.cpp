@@ -827,25 +827,25 @@ void Grid::simulate(int turnIdx, const vector<int>& actionsToPerform) {
 			}
 		}
 
+		surveillanceNodesDestroyed += bombsTick();
+
 		if (INVALID_IDX != actionIdxToCheck) {
 			const Action& actionToPerform = actions[actionIdxToCheck];
 
 			if (couldPlaceBomb(actionToPerform)) {
 				placeBomb(actionToPerform);
-				actionsBestSequence[solutionActionsCount] = actionIdxToCheck;
+				actionsBestSequence[actionToPerform.palcementRound] = actionIdxToCheck;
 			}
 		}
 
 		++solutionActionsCount;
 
-		surveillanceNodesDestroyed += bombsTick();
+		moveSNodes(simulationGrid);
 
 		if (surveillanceNodesDestroyed == sNodesCount) {
 			solutionFound = true;
 			break;
 		}
-
-		moveSNodes(simulationGrid);
 	}
 }
 
