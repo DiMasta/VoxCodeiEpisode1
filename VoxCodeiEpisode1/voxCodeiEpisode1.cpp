@@ -17,13 +17,14 @@
 
 using namespace std;
 
-//#define REDIRECT_CIN_FROM_FILE
-//#define REDIRECT_COUT_TO_FILE
+#define REDIRECT_CIN_FROM_FILE
+#define REDIRECT_COUT_TO_FILE
 //#define DEBUG_ONE_TURN
 //#define OUTPUT_GAME_DATA
 
 //const string INPUT_FILE_NAME = "input.txt";
-const string INPUT_FILE_NAME = "input_03_6_moving_nodes_6_bombs.txt";
+//const string INPUT_FILE_NAME = "input_03_6_moving_nodes_6_bombs.txt";
+const string INPUT_FILE_NAME = "input_07_indestructible_nodes.txt";
 const string OUTPUT_FILE_NAME = "output.txt";
 
 const string WAIT = "WAIT";
@@ -887,13 +888,13 @@ void Grid::simulate(int turnIdx, const vector<int>& actionsToPerform) {
 		moveSNodes(simulationGrid);
 
 		if (surveillanceNodesDestroyed == sNodesCount) {
-			for (const int idx : actionsToPerform) {
-				cerr << "Idx:"<< idx << " Round:" << actions[idx].palcementRound << "\tCol:" << actions[idx].col << "\tRow:" << actions[idx].row << endl;
-			}
-			
-			for (const int idx : actionsBestSequence) {
-				cerr << idx << " ";
-			}
+			//for (const int idx : actionsToPerform) {
+			//	cerr << "Idx:"<< idx << " Round:" << actions[idx].palcementRound << "\tCol:" << actions[idx].col << "\tRow:" << actions[idx].row << endl;
+			//}
+			//
+			//for (const int idx : actionsBestSequence) {
+			//	cerr << idx << " ";
+			//}
 
 			solutionFound = true;
 			break;
