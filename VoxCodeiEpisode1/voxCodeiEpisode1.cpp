@@ -827,8 +827,6 @@ void Grid::simulate(int turnIdx, const vector<int>& actionsToPerform) {
 			}
 		}
 
-		actionsBestSequence[solutionActionsCount] = INVALID_ID; // Wait action
-
 		if (INVALID_IDX != actionIdxToCheck) {
 			const Action& actionToPerform = actions[actionIdxToCheck];
 
