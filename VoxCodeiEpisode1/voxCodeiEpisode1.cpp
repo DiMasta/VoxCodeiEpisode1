@@ -23,8 +23,8 @@ using namespace std;
 //#define OUTPUT_GAME_DATA
 
 //const string INPUT_FILE_NAME = "input.txt";
-const string INPUT_FILE_NAME = "input_03_6_moving_nodes_6_bombs.txt";
-//const string INPUT_FILE_NAME = "input_07_indestructible_nodes.txt";
+//const string INPUT_FILE_NAME = "input_03_6_moving_nodes_6_bombs.txt";
+const string INPUT_FILE_NAME = "input_07_indestructible_nodes.txt";
 const string OUTPUT_FILE_NAME = "output.txt";
 
 const string WAIT = "WAIT";
@@ -582,7 +582,7 @@ public:
 	/// Create surveillance node based on the initial positions of all nodes, to derive their movement directions
 	/// @param[in] rowIdx the current row index of the surveillance node
 	/// @param[in] colIdx the current column index of the surveillance node
-	void createdSNode(int rowIdx, int colIdx);
+	void createSNode(int rowIdx, int colIdx);
 
 	/// Move all nodes in their directions round by round and echa round track the best empty cells
 	/// If an empty cell, which reaches all nodes, is found, break the simulation and use that cell in the that round
@@ -599,6 +599,9 @@ public:
 	/// @param[in] cell the cell to check
 	/// @return the count of surveilllance nodes in the cell
 	int getCellSNodesCount(const Cell& cell) const;
+
+	/// Use all possible directions for nodes to extract the correct ones
+	void claculateSNodesMovementDirections();
 
 private:
 	/// All nodes scatered across the grid
@@ -676,7 +679,7 @@ void Grid::createCell(int rowIdx, int colIdx, int turnIdx, Cell cell) {
 	if (SECOND_TURN == turnIdx) {
 		if (SURVEILLANCE_NODE == cell) {
 			// Create snode, based on the intial grid positions of nodes
-			createdSNode(rowIdx, colIdx);
+			createSNode(rowIdx, colIdx);
 			cell |= 1; // One node in cell
 		}
 		else if (EMPTY == cell) {
@@ -1008,7 +1011,7 @@ int Grid::getSolutionActionIdx(int turnIdx) const {
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::createdSNode(int rowIdx, int colIdx) {
+void Grid::createSNode(int rowIdx, int colIdx) {
 	Direction nodeDirection = Direction::INVALID;
 	SNode& snode = sNodes[sNodesCount++];
 
@@ -1171,6 +1174,20 @@ int Grid::getCellSNodesCount(const Cell& cell) const {
 	return sNodesCount;
 }
 
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Grid::claculateSNodesMovementDirections() {
+	for (int sNodeIdx = 0; sNodeIdx < sNodesCount; ++sNodeIdx) {
+		SNode& sNode = sNodes[sNodeIdx];
+
+		// For all possible snode's directions check if the turn grid is the same
+		for (int directionIdx = 0; directionIdx < sNode.getPossibleDirectionsCount(); ++directionIdx) {
+
+		}
+	}
+}
+
 //-------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------
@@ -1304,6 +1321,8 @@ void Game::getTurnInput() {
 
 void Game::turnBegin() {
 	if (turnsCount == SECOND_TURN) {
+		firewallGrid.claculateSNodesMovementDirections();
+
 		// The nodes movement is calculated, proceed with simulation
 		// The goal of the simulation is to find empty cell with the most nodes in range for bombs
 		// May be every time when updating node mark all empty cells which have access to it
