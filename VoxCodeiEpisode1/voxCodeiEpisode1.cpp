@@ -187,10 +187,15 @@ private:
 
 	Direction direction; ///< movement direction
 
-						 /// Initial surveillance node properties, used to reset the node after best turns are gathered
+	/// Initial surveillance node properties, used to reset the node after best turns are gathered
 	int initialRow;
 	int initialCol;
 	Direction initialDirection;
+
+	/// When comparing a snode based on the initial grid it may appear that the snode comes from seceral directions
+	/// Use this array to store all posible directions and check all snodes until the turnGrid is matched
+	Direction possibleDirections[DIRECTIONS_COUNT];
+	int possibleDirectionsCount;
 
 	unsigned int flags; ///< surveillance node state
 };
@@ -202,8 +207,12 @@ SNode::SNode() :
 	row(INVALID_IDX),
 	col(INVALID_IDX),
 	direction(Direction::INVALID),
-	flags(0)
+	flags(0),
+	possibleDirectionsCount(0)
 {
+	for (Direction& direction : possibleDirections) {
+		direction = Direction::INVALID;
+	}
 }
 
 //*************************************************************************************************************
@@ -975,40 +984,48 @@ int Grid::getSolutionActionIdx(int turnIdx) const {
 void Grid::createdSNode(int rowIdx, int colIdx) {
 	Direction nodeDirection = Direction::INVALID;
 
-	// Check all four neighbour cells to find from where the snode comes
-	for (const Direction direction : directions) {
-		int rowNeighbour = rowIdx;
-		int colNeighbour = colIdx;
+	Cell& cell = initialGrid[rowIdx][colIdx];
 
-		rowNeighbour += MOVE_IN_ROWS[static_cast<int>(direction)];
-		colNeighbour += MOVE_IN_COLS[static_cast<int>(direction)];
+	// If in the initial grid there is a surveillance node on the same place as the given node, this means the snode is static
+	if (SURVEILLANCE_NODE & cell) {
+		// Empty the initial cell, because it is already used to determaine the direction of a node
+		cell = EMPTY_FLAG;
+	}
+	else {
 
-		if (rowNeighbour < 0 || rowNeighbour >= height || colNeighbour < 0 || colNeighbour >= width) {
-			continue;
-		}
 
-		Cell& cell = initialGrid[rowNeighbour][colNeighbour];
-		if (SURVEILLANCE_NODE & cell) {
-			const int rowDiff = rowIdx - rowNeighbour;
-			const int colDiff = colIdx - colNeighbour;
+		// Check all four neighbour cells to find from where the snode comes
+		for (const Direction direction : directions) {
+			int rowNeighbour = rowIdx;
+			int colNeighbour = colIdx;
 
-			if (rowDiff > 0) {
-				nodeDirection = Direction::DOWN;
-			}
-			else if (rowDiff < 0) {
-				nodeDirection = Direction::UP;
-			}
-			else if (colDiff > 0) {
-				nodeDirection = Direction::RIGHT;
-			}
-			else if (colDiff < 0) {
-				nodeDirection = Direction::LEFT;
+			rowNeighbour += MOVE_IN_ROWS[static_cast<int>(direction)];
+			colNeighbour += MOVE_IN_COLS[static_cast<int>(direction)];
+
+			if (rowNeighbour < 0 || rowNeighbour >= height || colNeighbour < 0 || colNeighbour >= width) {
+				continue;
 			}
 
-			// Empty the initial cell, because it is already used to determaine the direction of a node
-			cell = EMPTY_FLAG;
+			Cell& cell = initialGrid[rowNeighbour][colNeighbour];
+			if (SURVEILLANCE_NODE & cell) {
+				const int rowDiff = rowIdx - rowNeighbour;
+				const int colDiff = colIdx - colNeighbour;
 
-			break;
+				if (rowDiff > 0) {
+					nodeDirection = Direction::DOWN;
+				} else if (rowDiff < 0) {
+					nodeDirection = Direction::UP;
+				} else if (colDiff > 0) {
+					nodeDirection = Direction::RIGHT;
+				} else if (colDiff < 0) {
+					nodeDirection = Direction::LEFT;
+				}
+
+				// Empty the initial cell, because it is already used to determaine the direction of a node
+				cell = EMPTY_FLAG;
+
+				break;
+			}
 		}
 	}
 
