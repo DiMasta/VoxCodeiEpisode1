@@ -23,8 +23,8 @@ using namespace std;
 //#define OUTPUT_GAME_DATA
 
 //const string INPUT_FILE_NAME = "input.txt";
-//const string INPUT_FILE_NAME = "input_03_6_moving_nodes_6_bombs.txt";
-const string INPUT_FILE_NAME = "input_07_indestructible_nodes.txt";
+const string INPUT_FILE_NAME = "input_03_6_moving_nodes_6_bombs.txt";
+//const string INPUT_FILE_NAME = "input_07_indestructible_nodes.txt";
 const string OUTPUT_FILE_NAME = "output.txt";
 
 const string WAIT = "WAIT";
@@ -168,6 +168,10 @@ public:
 		return direction;
 	}
 
+	int getPossibleDirectionsCount() const {
+		return possibleDirectionsCount;
+	}
+
 	/// Initialize the node with its correct direction and coordinates
 	/// @param[in] rowIdx surveillance node row idx
 	/// @param[in] colIdx surveillance node col idx
@@ -176,6 +180,15 @@ public:
 
 	/// Reset to node to its initial state
 	void reset();
+
+	/// Add the given direction to the possible snode directions, the correct one will be chosen from them
+	/// @param[in] direction the possible snode direction
+	void addPossibleDirection(Direction direction);
+
+	/// Get directionIdxth possible direction
+	/// @param[in] directionIdx the index of the wanted possible direction
+	/// @return the possible direction
+	Direction getPossibleDirection(int directionIdx) const;
 
 	void setFlag(unsigned int flag);
 	void unsetFlag(unsigned int flag);
@@ -236,6 +249,20 @@ void SNode::reset() {
 	col = initialCol;
 	direction = initialDirection;
 	flags = 0;
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void SNode::addPossibleDirection(Direction direction) {
+	possibleDirections[possibleDirectionsCount++] = direction;
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+Direction SNode::getPossibleDirection(int directionIdx) const {
+	return possibleDirections[directionIdx];
 }
 
 //*************************************************************************************************************
@@ -983,6 +1010,7 @@ int Grid::getSolutionActionIdx(int turnIdx) const {
 
 void Grid::createdSNode(int rowIdx, int colIdx) {
 	Direction nodeDirection = Direction::INVALID;
+	SNode& snode = sNodes[sNodesCount++];
 
 	Cell& cell = initialGrid[rowIdx][colIdx];
 
@@ -992,8 +1020,6 @@ void Grid::createdSNode(int rowIdx, int colIdx) {
 		cell = EMPTY_FLAG;
 	}
 	else {
-
-
 		// Check all four neighbour cells to find from where the snode comes
 		for (const Direction direction : directions) {
 			int rowNeighbour = rowIdx;
@@ -1006,8 +1032,7 @@ void Grid::createdSNode(int rowIdx, int colIdx) {
 				continue;
 			}
 
-			Cell& cell = initialGrid[rowNeighbour][colNeighbour];
-			if (SURVEILLANCE_NODE & cell) {
+			if (SURVEILLANCE_NODE & initialGrid[rowNeighbour][colNeighbour]) {
 				const int rowDiff = rowIdx - rowNeighbour;
 				const int colDiff = colIdx - colNeighbour;
 
@@ -1021,15 +1046,19 @@ void Grid::createdSNode(int rowIdx, int colIdx) {
 					nodeDirection = Direction::LEFT;
 				}
 
-				// Empty the initial cell, because it is already used to determaine the direction of a node
-				cell = EMPTY_FLAG;
-
-				break;
+				snode.addPossibleDirection(nodeDirection);
 			}
+		}
+
+		if (1 == snode.getPossibleDirectionsCount()) {
+			nodeDirection = snode.getPossibleDirection(0);
+
+			// Empty the initial cell, because it is already used to determaine the direction of a node
+			cell = EMPTY_FLAG;
 		}
 	}
 
-	sNodes[sNodesCount++].init(rowIdx, colIdx, nodeDirection);
+	snode.init(rowIdx, colIdx, nodeDirection);
 }
 
 //*************************************************************************************************************
