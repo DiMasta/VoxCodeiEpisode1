@@ -582,7 +582,8 @@ public:
 	/// Create surveillance node based on the initial positions of all nodes, to derive their movement directions
 	/// @param[in] rowIdx the current row index of the surveillance node
 	/// @param[in] colIdx the current column index of the surveillance node
-	void createSNode(int rowIdx, int colIdx);
+	/// @param[in] tunrIdx the current turn index
+	void createSNode(int rowIdx, int colIdx, int turnIdx);
 
 	/// Move all nodes in their directions round by round and echa round track the best empty cells
 	/// If an empty cell, which reaches all nodes, is found, break the simulation and use that cell in the that round
@@ -601,11 +602,16 @@ public:
 	int getCellSNodesCount(const Cell& cell) const;
 
 	/// Use all possible directions for nodes to extract the correct ones
-	void claculateSNodesMovementDirections();
+	/// Using recurtion gather all possible combination from the possible directions of all nodes
+	/// Move all sureveillance nodes in reverse one turn and compare if the simulation grid is identical with the initialgrid
+	void claculateSNodesMovementDirections(int depth, int directionsToTestCount, const vector<Direction>& directionsToTest);
 
 private:
 	/// All nodes scatered across the grid
 	SNode sNodes[ALL_CELLS];
+
+	/// Sureveillance nodes with initial positions used to be moved in all possible directions to determain the correct directions
+	SNode initialSNodes[ALL_CELLS];
 
 	/// All possible actions for the grid, including placing bombs on nodes (after thery are destroyed)
 	Action actions[MAX_ACTIONS_COUNT];
@@ -639,6 +645,9 @@ private:
 
 	/// The count of all surveillance nodes, if they could be destroyed with one bomb, no need of DFS
 	int sNodesCount;
+
+	/// The count of all surveillance nodes, with which the game starts
+	int initialSNodesCount;
 
 	/// All possible places for bombs
 	int actionsCount;
@@ -676,10 +685,10 @@ void Grid::createCell(int rowIdx, int colIdx, int turnIdx, Cell cell) {
 		initialGrid[rowIdx][colIdx] = cell;
 	}
 
-	if (SECOND_TURN == turnIdx) {
+	if (turnIdx < SECOND_TURN) {
 		if (SURVEILLANCE_NODE == cell) {
 			// Create snode, based on the intial grid positions of nodes
-			createSNode(rowIdx, colIdx);
+			createSNode(rowIdx, colIdx, turnIdx);
 			cell |= 1; // One node in cell
 		}
 		else if (EMPTY == cell) {
@@ -815,10 +824,6 @@ void Grid::sortActions() {
 //*************************************************************************************************************
 
 void Grid::dfsActions(int turnIdx) {
-	//for (const Action& action : actions) {
-	//	cerr << "row=" << action.row << " col=" << action.col << " afffectedSNodesCount=" << action.afffectedSNodesCount << " placementRound=" << action.palcementRound << endl;
-	//}
-
 	vector<int> actionsToPerform;
 	actionsToPerform.reserve(MAX_ACTIONS_TO_CHECK);
 
@@ -865,42 +870,9 @@ void Grid::recursiveDFSActions(int turnIdx, unsigned int recursionFlags, int dep
 
 // TODO: use bit encoding for actions indecies
 void Grid::simulate(int turnIdx, const vector<int>& actionsToPerform) {
-	//if (5 == actionsToPerform[5] && 14 == actionsToPerform[6]) {
-	//	for (const int idx : actionsToPerform) {
-	//		cerr << idx << ", ";
-	//	}
-	//	cerr << endl;
-	//
-	//	for (const int idx : actionsToPerform) {
-	//		cerr << " Round:" << actions[idx].palcementRound << "\tCol:" << actions[idx].col << "\tRow:" << actions[idx].row << endl;
-	//	}
-	//
-	//	for (int rowIdx = 0; rowIdx < height; ++rowIdx) {
-	//		for (int colIdx = 0; colIdx < width; ++colIdx) {\
-	//			if (simulationGrid[rowIdx][colIdx] & EMPTY_FLAG) {
-	//				cerr << '.';
-	//			}
-	//			else {
-	//				cerr << simulationGrid[rowIdx][colIdx];
-	//			}
-	//		}
-	//		cerr << endl;
-	//	}
-	//}
-
 	resetForSimulation();
 
 	int surveillanceNodesDestroyed = 0;
-
-	//Action actions[] = {
-	//	Action(4, 5, 0, 25),
-	//	Action(7, 5, 0, 36),
-	//	Action(4, 5, 0, 1),
-	//	Action(2, 7, 0, 12),
-	//	Action(3, 7, 0, 13),
-	//	Action(4, 8, 0, 34),
-	//	Action(3, 2, 0, 39)
-	//};
 
 	for (int roundIdx = turnIdx; roundIdx < roundsLeft; ++roundIdx) {
 		int actionIdxToCheck = INVALID_IDX;
@@ -927,14 +899,6 @@ void Grid::simulate(int turnIdx, const vector<int>& actionsToPerform) {
 		moveSNodes(simulationGrid);
 
 		if (surveillanceNodesDestroyed == sNodesCount) {
-			//for (const int idx : actionsToPerform) {
-			//	cerr << "Idx:"<< idx << " Round:" << actions[idx].palcementRound << "\tCol:" << actions[idx].col << "\tRow:" << actions[idx].row << endl;
-			//}
-			//
-			//for (const int idx : actionsBestSequence) {
-			//	cerr << idx << " ";
-			//}
-
 			solutionFound = true;
 			break;
 		}
@@ -1011,7 +975,7 @@ int Grid::getSolutionActionIdx(int turnIdx) const {
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::createSNode(int rowIdx, int colIdx) {
+void Grid::createSNode(int rowIdx, int colIdx, int turnIdx) {
 	Direction nodeDirection = Direction::INVALID;
 	SNode& snode = sNodes[sNodesCount++];
 
@@ -1177,14 +1141,23 @@ int Grid::getCellSNodesCount(const Cell& cell) const {
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::claculateSNodesMovementDirections() {
-	for (int sNodeIdx = 0; sNodeIdx < sNodesCount; ++sNodeIdx) {
-		SNode& sNode = sNodes[sNodeIdx];
+void Grid::claculateSNodesMovementDirections(int depth, int directionsToTestCount, const vector<Direction>& directionsToTest) {
+	// Gather directions array to test
+	// Use surveillance nodes 
+	if (directionsToTestCount == sNodesCount) {
+		// Reverse move all nodes
+		// reverseMoveSNodes(directionsToTest);
+	}
 
-		// For all possible snode's directions check if the turn grid is the same
-		for (int directionIdx = 0; directionIdx < sNode.getPossibleDirectionsCount(); ++directionIdx) {
+	const SNode& sNodeToCheck = sNodes[depth];
 
-		}
+	for (int possDirIdx = 0; possDirIdx < sNodeToCheck.getPossibleDirectionsCount(); ++possDirIdx) {
+		Direction possibleDirection = sNodeToCheck.getPossibleDirection(possDirIdx);
+
+		vector<Direction> newPossibleDirections = directionsToTest;
+		newPossibleDirections.push_back(possibleDirection);
+
+		claculateSNodesMovementDirections(++depth, ++directionsToTestCount, newPossibleDirections);
 	}
 }
 
