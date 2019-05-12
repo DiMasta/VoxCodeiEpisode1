@@ -80,6 +80,14 @@ static const Direction directions[] = {
 	Direction::RIGHT
 };
 
+/// Reverse direction of the normal direction 
+static const Direction reverseDirections[] = {
+	Direction::DOWN,
+	Direction::UP,
+	Direction::RIGHT,
+	Direction::LEFT
+};
+
 static const int MOVE_IN_ROWS[DIRECTIONS_COUNT] = { -1, 1, 0, 0 };
 static const int MOVE_IN_COLS[DIRECTIONS_COUNT] = { 0, 0, -1, 1 };
 
@@ -590,11 +598,16 @@ public:
 	/// @param[in] simulationStartRound how many turns are alreadu passed
 	void simulateAllRounds(int simulationStartRound);
 
-	/// Move nodes for the given round
-	void moveSNodes(Cell(*gridToUse)[MAX_WIDTH]);
+	/// Move nodes on the given grid with given directions or nodes own directions
+	/// @param[in] directions the overriding directions to use if they are equal to the size of the sureveillance nodes
+	/// @param[in/out] gridToUse the grid on which the movement will be performed
+	void moveSNodes(const vector<Direction>& directions, Cell(*gridToUse)[MAX_WIDTH]);
 
 	/// First unset the current cell to be surveillance node, then set the new cell
-	void moveSNode(int sNodeIdx, Cell(*gridToUse)[MAX_WIDTH]);
+	/// @param[in] sNodeIdx the index of the node to move
+	/// @param[in] directions the overriding directions to use if they are equal to the size of the sureveillance nodes
+	/// @param[in/out] gridToUse the grid on which the movement will be performed
+	void moveSNode(int sNodeIdx, const vector<Direction>& directions, Cell(*gridToUse)[MAX_WIDTH]);
 
 	/// Extract the infromation for the count of the surveillance nodes in the given cell
 	/// @param[in] cell the cell to check
@@ -604,7 +617,13 @@ public:
 	/// Use all possible directions for nodes to extract the correct ones
 	/// Using recurtion gather all possible combination from the possible directions of all nodes
 	/// Move all sureveillance nodes in reverse one turn and compare if the simulation grid is identical with the initialgrid
-	void claculateSNodesMovementDirections(int depth, int directionsToTestCount, const vector<Direction>& directionsToTest);
+	/// @param[in] depth the current depth of the search tree
+	/// @param[in] directionsToTest combination of directions for the surveillance nodes, new one added in each level of the search tree
+	void claculateSNodesMovementDirections(int depth, const vector<Direction>& directionsToTest);
+
+	/// Use the given directions to move the sureceillnace nodes one turn back
+	/// @param[in] directionsToTest the directions combination to test in reverse to the given
+	void reverseMoveSNodes(const vector<Direction>& directionsToTest);
 
 private:
 	/// All nodes scatered across the grid
@@ -685,7 +704,7 @@ void Grid::createCell(int rowIdx, int colIdx, int turnIdx, Cell cell) {
 		initialGrid[rowIdx][colIdx] = cell;
 	}
 
-	if (turnIdx < SECOND_TURN) {
+	if (SECOND_TURN == turnIdx) {
 		if (SURVEILLANCE_NODE == cell) {
 			// Create snode, based on the intial grid positions of nodes
 			createSNode(rowIdx, colIdx, turnIdx);
@@ -896,7 +915,8 @@ void Grid::simulate(int turnIdx, const vector<int>& actionsToPerform) {
 
 		++solutionActionsCount;
 
-		moveSNodes(simulationGrid);
+		vector<Direction> directions(0);
+		moveSNodes(directions, simulationGrid);
 
 		if (surveillanceNodesDestroyed == sNodesCount) {
 			solutionFound = true;
@@ -1033,7 +1053,8 @@ void Grid::createSNode(int rowIdx, int colIdx, int turnIdx) {
 
 void Grid::simulateAllRounds(int simulationStartRound) {
 	for (int roundIdx = simulationStartRound; roundIdx < roundsLeft; ++roundIdx) {
-		moveSNodes(grid);
+		vector<Direction> directions(0);
+		moveSNodes(directions, grid);
 
 		// First two turns just move the nodes, so when the bomb is placed it affetct in right turn
 		if (roundIdx >= simulationStartRound + (BOMB_ROUNDS_TO_EXPLODE - 1)) {
@@ -1049,16 +1070,16 @@ void Grid::simulateAllRounds(int simulationStartRound) {
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::moveSNodes(Cell(*gridToUse)[MAX_WIDTH]) {
+void Grid::moveSNodes(const vector<Direction>& directions, Cell(*gridToUse)[MAX_WIDTH]) {
 	for (int sNodeIdx = 0; sNodeIdx < sNodesCount; ++sNodeIdx) {
-		moveSNode(sNodeIdx, gridToUse);
+		moveSNode(sNodeIdx, directions, gridToUse);
 	}
 }
 
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::moveSNode(int sNodeIdx, Cell(*gridToUse)[MAX_WIDTH]) {
+void Grid::moveSNode(int sNodeIdx, const vector<Direction>& directions, Cell(*gridToUse)[MAX_WIDTH]) {
 	SNode& sNode = sNodes[sNodeIdx];
 	Direction sNodeDirection = sNode.getDirection();
 
@@ -1141,12 +1162,10 @@ int Grid::getCellSNodesCount(const Cell& cell) const {
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::claculateSNodesMovementDirections(int depth, int directionsToTestCount, const vector<Direction>& directionsToTest) {
-	// Gather directions array to test
-	// Use surveillance nodes 
-	if (directionsToTestCount == sNodesCount) {
-		// Reverse move all nodes
-		// reverseMoveSNodes(directionsToTest);
+void Grid::claculateSNodesMovementDirections(int depth, const vector<Direction>& directionsToTest) {
+	if (depth == sNodesCount) {
+		reverseMoveSNodes(directionsToTest);
+		return;
 	}
 
 	const SNode& sNodeToCheck = sNodes[depth];
@@ -1157,8 +1176,20 @@ void Grid::claculateSNodesMovementDirections(int depth, int directionsToTestCoun
 		vector<Direction> newPossibleDirections = directionsToTest;
 		newPossibleDirections.push_back(possibleDirection);
 
-		claculateSNodesMovementDirections(++depth, ++directionsToTestCount, newPossibleDirections);
+		claculateSNodesMovementDirections(++depth, newPossibleDirections);
 	}
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Grid::reverseMoveSNodes(const vector<Direction>& directionsToTest) {
+	vector<Direction> directions;
+	for (Direction direction : directionsToTest) {
+		directions.push_back(reverseDirections[static_cast<int>(direction)]);
+	}
+
+	moveSNodes(directions, simulationGrid);
 }
 
 //-------------------------------------------------------------------------------------------------------------
@@ -1294,7 +1325,8 @@ void Game::getTurnInput() {
 
 void Game::turnBegin() {
 	if (turnsCount == SECOND_TURN) {
-		firewallGrid.claculateSNodesMovementDirections();
+		vector<Direction> directions;
+		firewallGrid.claculateSNodesMovementDirections(0, directions);
 
 		// The nodes movement is calculated, proceed with simulation
 		// The goal of the simulation is to find empty cell with the most nodes in range for bombs
