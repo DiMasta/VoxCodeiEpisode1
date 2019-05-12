@@ -49,6 +49,7 @@ static const int MAX_ACTIONS_TO_CHECK = 32; // Limit the checked actions to the 
 static const int BOMB_RADIUS = 3;
 static const int BOMB_ROUNDS_TO_EXPLODE = 3;
 static const int SECOND_TURN = 1;
+static const int THIRD_TURN = 2;
 
 /// Flags
 static const unsigned int SOLUTION_FOUND_FLAG =		0b1000'0000'0000'0000'0000'0000'0000'0000;
@@ -71,6 +72,11 @@ enum class Direction : int {
 	DOWN = 1,
 	LEFT = 2,
 	RIGHT = 3,
+};
+
+enum class SimulationType : int {
+	S_NODES_DIRECTIONS = 0,
+	BEST_ACTIONS,
 };
 
 static const Direction directions[] = {
@@ -566,8 +572,9 @@ public:
 	/// @param[in] actionsToPerform which action to take in certain order
 	void simulate(int turnIdx, const vector<int>& actionsToPerform);
 
-	/// Reset firewall grid to its original state from the beginning of the turn
-	void resetForSimulation();
+	/// Reset firewall grid based on the given simulation type
+	/// @param[in] simType type of the simulation which is performed
+	void resetForSimulation(SimulationType simType);
 
 	/// Check if given action places the bomb on empty cell or surveillance node cell
 	/// @param[in] action the action to perform
@@ -621,16 +628,15 @@ public:
 	/// @param[in] directionsToTest combination of directions for the surveillance nodes, new one added in each level of the search tree
 	void claculateSNodesMovementDirections(int depth, const vector<Direction>& directionsToTest);
 
-	/// Use the given directions to move the sureceillnace nodes one turn back
-	/// @param[in] directionsToTest the directions combination to test in reverse to the given
-	void reverseMoveSNodes(const vector<Direction>& directionsToTest);
+	/// Check the simulation of movement made the same simulation grid as the inital grid
+	bool checkNodesInitialPositions() const;
+
+	/// Using the initial surveillance nodes' positions and the second turn positions get the possible directions for nodes
+	void fillPossibleSNodesDirections();
 
 private:
 	/// All nodes scatered across the grid
 	SNode sNodes[ALL_CELLS];
-
-	/// Sureveillance nodes with initial positions used to be moved in all possible directions to determain the correct directions
-	SNode initialSNodes[ALL_CELLS];
 
 	/// All possible actions for the grid, including placing bombs on nodes (after thery are destroyed)
 	Action actions[MAX_ACTIONS_COUNT];
@@ -665,9 +671,6 @@ private:
 	/// The count of all surveillance nodes, if they could be destroyed with one bomb, no need of DFS
 	int sNodesCount;
 
-	/// The count of all surveillance nodes, with which the game starts
-	int initialSNodesCount;
-
 	/// All possible places for bombs
 	int actionsCount;
 
@@ -679,6 +682,9 @@ private:
 
 	/// Marks if we found set actions, which are solving the puzzle
 	bool solutionFound;
+
+	/// Marks if we found the correct directions for the movement of the surveillnace nodes
+	bool nodesMovementCalculated;
 };
 
 //*************************************************************************************************************
@@ -689,7 +695,8 @@ Grid::Grid() :
 	actionsCount(0),
 	solutionActionsCount(0),
 	bombsCount(0),
-	solutionFound(false)
+	solutionFound(false),
+	nodesMovementCalculated(false)
 {
 	for (int& bestAction : actionsBestSequence) {
 		bestAction = INVALID_IDX;
@@ -702,11 +709,8 @@ Grid::Grid() :
 void Grid::createCell(int rowIdx, int colIdx, int turnIdx, Cell cell) {
 	if (0 == turnIdx) {
 		initialGrid[rowIdx][colIdx] = cell;
-	}
 
-	if (SECOND_TURN == turnIdx) {
 		if (SURVEILLANCE_NODE == cell) {
-			// Create snode, based on the intial grid positions of nodes
 			createSNode(rowIdx, colIdx, turnIdx);
 			cell |= 1; // One node in cell
 		}
@@ -714,8 +718,21 @@ void Grid::createCell(int rowIdx, int colIdx, int turnIdx, Cell cell) {
 			cell = EMPTY_FLAG; // Using flag, beacuse '.' uses more bits in the char
 		}
 
-		grid[rowIdx][colIdx] = cell;
+		initialGrid[rowIdx][colIdx] = cell;
 	}
+
+	//if (turnIdx <= SECOND_TURN) {
+	//	if (SURVEILLANCE_NODE == cell) {
+	//		// Create snode, based on the intial grid positions of nodes
+	//		createSNode(rowIdx, colIdx, turnIdx);
+	//		cell |= 1; // One node in cell
+	//	}
+	//	else if (EMPTY == cell) {
+	//		cell = EMPTY_FLAG; // Using flag, beacuse '.' uses more bits in the char
+	//	}
+	//
+	//	grid[rowIdx][colIdx] = cell;
+	//}
 
 	// Every turn fill the turn grid
 	turnGrid[rowIdx][colIdx] = cell;
@@ -889,7 +906,7 @@ void Grid::recursiveDFSActions(int turnIdx, unsigned int recursionFlags, int dep
 
 // TODO: use bit encoding for actions indecies
 void Grid::simulate(int turnIdx, const vector<int>& actionsToPerform) {
-	resetForSimulation();
+	resetForSimulation(SimulationType::BEST_ACTIONS);
 
 	int surveillanceNodesDestroyed = 0;
 
@@ -928,10 +945,16 @@ void Grid::simulate(int turnIdx, const vector<int>& actionsToPerform) {
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::resetForSimulation() {
+void Grid::resetForSimulation(SimulationType simType) {
 	for (int rowIdx = 0; rowIdx < height; ++rowIdx) {
 		for (int colIdx = 0; colIdx < width; ++colIdx) {
-			simulationGrid[rowIdx][colIdx] = turnGrid[rowIdx][colIdx];
+			Cell cellToReset = turnGrid[rowIdx][colIdx];
+
+			if (SimulationType::S_NODES_DIRECTIONS == simType) {
+				cellToReset = initialGrid[rowIdx][colIdx];
+			}
+
+			simulationGrid[rowIdx][colIdx] = cellToReset;
 		}
 	}
 
@@ -996,56 +1019,55 @@ int Grid::getSolutionActionIdx(int turnIdx) const {
 //*************************************************************************************************************
 
 void Grid::createSNode(int rowIdx, int colIdx, int turnIdx) {
-	Direction nodeDirection = Direction::INVALID;
-	SNode& snode = sNodes[sNodesCount++];
+	sNodes[sNodesCount++].init(rowIdx, colIdx, Direction::INVALID);
 
-	Cell& cell = initialGrid[rowIdx][colIdx];
-
-	// If in the initial grid there is a surveillance node on the same place as the given node, this means the snode is static
-	if (SURVEILLANCE_NODE & cell) {
-		// Empty the initial cell, because it is already used to determaine the direction of a node
-		cell = EMPTY_FLAG;
-	}
-	else {
-		// Check all four neighbour cells to find from where the snode comes
-		for (const Direction direction : directions) {
-			int rowNeighbour = rowIdx;
-			int colNeighbour = colIdx;
-
-			rowNeighbour += MOVE_IN_ROWS[static_cast<int>(direction)];
-			colNeighbour += MOVE_IN_COLS[static_cast<int>(direction)];
-
-			if (rowNeighbour < 0 || rowNeighbour >= height || colNeighbour < 0 || colNeighbour >= width) {
-				continue;
-			}
-
-			if (SURVEILLANCE_NODE & initialGrid[rowNeighbour][colNeighbour]) {
-				const int rowDiff = rowIdx - rowNeighbour;
-				const int colDiff = colIdx - colNeighbour;
-
-				if (rowDiff > 0) {
-					nodeDirection = Direction::DOWN;
-				} else if (rowDiff < 0) {
-					nodeDirection = Direction::UP;
-				} else if (colDiff > 0) {
-					nodeDirection = Direction::RIGHT;
-				} else if (colDiff < 0) {
-					nodeDirection = Direction::LEFT;
-				}
-
-				snode.addPossibleDirection(nodeDirection);
-			}
-		}
-
-		if (1 == snode.getPossibleDirectionsCount()) {
-			nodeDirection = snode.getPossibleDirection(0);
-
-			// Empty the initial cell, because it is already used to determaine the direction of a node
-			cell = EMPTY_FLAG;
-		}
-	}
-
-	snode.init(rowIdx, colIdx, nodeDirection);
+	//Direction nodeDirection = Direction::INVALID;
+	//SNode& snode = sNodes[sNodesCount++];
+	//
+	////Cell& cell = initialGrid[rowIdx][colIdx];
+	//
+	//// If in the initial grid there is a surveillance node on the same place as the given node, this means the snode is static
+	//if (SURVEILLANCE_NODE & cell) {
+	//	// Add only one possible direction it will be used when determening the directions for all nodes
+	//	snode.addPossibleDirection(nodeDirection);
+	//}
+	//else {
+	//	// Check all four neighbour cells to find from where the snode comes
+	//	for (const Direction direction : directions) {
+	//		int rowNeighbour = rowIdx;
+	//		int colNeighbour = colIdx;
+	//
+	//		rowNeighbour += MOVE_IN_ROWS[static_cast<int>(direction)];
+	//		colNeighbour += MOVE_IN_COLS[static_cast<int>(direction)];
+	//
+	//		if (rowNeighbour < 0 || rowNeighbour >= height || colNeighbour < 0 || colNeighbour >= width) {
+	//			continue;
+	//		}
+	//
+	//		if (SURVEILLANCE_NODE & initialGrid[rowNeighbour][colNeighbour]) {
+	//			const int rowDiff = rowIdx - rowNeighbour;
+	//			const int colDiff = colIdx - colNeighbour;
+	//
+	//			if (rowDiff > 0) {
+	//				nodeDirection = Direction::DOWN;
+	//			} else if (rowDiff < 0) {
+	//				nodeDirection = Direction::UP;
+	//			} else if (colDiff > 0) {
+	//				nodeDirection = Direction::RIGHT;
+	//			} else if (colDiff < 0) {
+	//				nodeDirection = Direction::LEFT;
+	//			}
+	//
+	//			snode.addPossibleDirection(nodeDirection);
+	//		}
+	//	}
+	//
+	//	if (1 == snode.getPossibleDirectionsCount()) {
+	//		nodeDirection = snode.getPossibleDirection(0);
+	//	}
+	//}
+	//
+	//snode.init(rowIdx, colIdx, nodeDirection);
 }
 
 //*************************************************************************************************************
@@ -1082,6 +1104,10 @@ void Grid::moveSNodes(const vector<Direction>& directions, Cell(*gridToUse)[MAX_
 void Grid::moveSNode(int sNodeIdx, const vector<Direction>& directions, Cell(*gridToUse)[MAX_WIDTH]) {
 	SNode& sNode = sNodes[sNodeIdx];
 	Direction sNodeDirection = sNode.getDirection();
+
+	if (static_cast<int>(directions.size()) == sNodesCount) {
+		sNodeDirection = directions[sNodeIdx];
+	}
 
 	if (Direction::INVALID != sNodeDirection && !sNode.hasFlag(DESTROYED_FLAG)) {
 		const int sNodeRow = sNode.getRow();
@@ -1163,33 +1189,94 @@ int Grid::getCellSNodesCount(const Cell& cell) const {
 //*************************************************************************************************************
 
 void Grid::claculateSNodesMovementDirections(int depth, const vector<Direction>& directionsToTest) {
+	if (nodesMovementCalculated || depth > sNodesCount) {
+		return;
+	}
+
 	if (depth == sNodesCount) {
-		reverseMoveSNodes(directionsToTest);
+		resetForSimulation(SimulationType::S_NODES_DIRECTIONS);
+		moveSNodes(directionsToTest, simulationGrid);
+		moveSNodes(directionsToTest, simulationGrid);
+		nodesMovementCalculated = checkNodesInitialPositions();
 		return;
 	}
 
 	const SNode& sNodeToCheck = sNodes[depth];
 
 	for (int possDirIdx = 0; possDirIdx < sNodeToCheck.getPossibleDirectionsCount(); ++possDirIdx) {
+		if (nodesMovementCalculated) {
+			break;
+		}
+
 		Direction possibleDirection = sNodeToCheck.getPossibleDirection(possDirIdx);
 
 		vector<Direction> newPossibleDirections = directionsToTest;
 		newPossibleDirections.push_back(possibleDirection);
 
-		claculateSNodesMovementDirections(++depth, newPossibleDirections);
+		claculateSNodesMovementDirections(depth + 1, newPossibleDirections);
 	}
 }
 
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::reverseMoveSNodes(const vector<Direction>& directionsToTest) {
-	vector<Direction> directions;
-	for (Direction direction : directionsToTest) {
-		directions.push_back(reverseDirections[static_cast<int>(direction)]);
+bool Grid::checkNodesInitialPositions() const {
+	bool sNodesPositionsCorrect = true;
+
+	for (int rowIdx = 0; rowIdx < height; ++rowIdx) {
+		for (int colIdx = 0; colIdx < width; ++colIdx) {
+			const Cell turnCell = turnGrid[rowIdx][colIdx];
+			const Cell simulationCell = simulationGrid[rowIdx][colIdx];
+
+			const bool initialCellSNode = SURVEILLANCE_NODE & turnCell;
+			const bool simulationCellSNode = SURVEILLANCE_NODE & simulationCell;
+
+			if (initialCellSNode != simulationCellSNode) {
+				sNodesPositionsCorrect = false;
+				break;
+			}
+		}
+
+		if (!sNodesPositionsCorrect) {
+			break;
+		}
 	}
 
-	moveSNodes(directions, simulationGrid);
+	return sNodesPositionsCorrect;
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Grid::fillPossibleSNodesDirections() {
+	for (int sNodeIdx = 0; sNodeIdx < sNodesCount; ++sNodeIdx) {
+		SNode& sNode = sNodes[sNodeIdx];
+		const int sNodeRow = sNode.getRow();
+		const int sNodeCol = sNode.getCol();
+
+		for (const Direction direction : directions) {
+			int rowNeighbour = sNodeRow;
+			int colNeighbour = sNodeCol;
+
+			rowNeighbour += MOVE_IN_ROWS[static_cast<int>(direction)];
+			colNeighbour += MOVE_IN_COLS[static_cast<int>(direction)];
+
+			if (rowNeighbour < 0 || rowNeighbour >= height || colNeighbour < 0 || colNeighbour >= width) {
+				continue;
+			}
+
+			if (SURVEILLANCE_NODE & turnGrid[rowNeighbour][colNeighbour]) {
+				const int rowDiff = sNodeRow - rowNeighbour;
+				const int colDiff = sNodeCol - colNeighbour;
+
+				sNode.addPossibleDirection(direction);
+			}
+		}
+
+		if (1 == sNode.getPossibleDirectionsCount()) {
+			sNode.init(sNodeRow, sNodeCol, sNode.getPossibleDirection(0));
+		}
+	}
 }
 
 //-------------------------------------------------------------------------------------------------------------
@@ -1318,13 +1405,17 @@ void Game::getTurnInput() {
 			firewallGrid.createCell(rowIdx, colIdx, turnsCount, cell);
 		}
 	}
+
+	if (SECOND_TURN == turnsCount) {
+		firewallGrid.fillPossibleSNodesDirections();
+	}
 }
 
 //*************************************************************************************************************
 //*************************************************************************************************************
 
 void Game::turnBegin() {
-	if (turnsCount == SECOND_TURN) {
+	if (turnsCount == THIRD_TURN) {
 		vector<Direction> directions;
 		firewallGrid.claculateSNodesMovementDirections(0, directions);
 
