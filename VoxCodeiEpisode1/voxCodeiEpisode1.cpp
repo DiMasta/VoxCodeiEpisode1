@@ -23,8 +23,12 @@ using namespace std;
 //#define OUTPUT_GAME_DATA
 
 //const string INPUT_FILE_NAME = "input.txt";
+//const string INPUT_FILE_NAME = "input_01_one_moving_node.txt";
+//const string INPUT_FILE_NAME = "input_02_2_moving_nodes_2_bombs.txt";
 //const string INPUT_FILE_NAME = "input_03_6_moving_nodes_6_bombs.txt";
+//const string INPUT_FILE_NAME = "input_04_2_moving_nodes_1_bombs.txt";
 //const string INPUT_FILE_NAME = "input_05_9_moving_nodes_9_bombs.txt";
+//const string INPUT_FILE_NAME = "input_06_moving_nodes_1_bombs.txt";
 const string INPUT_FILE_NAME = "input_07_indestructible_nodes.txt";
 //const string INPUT_FILE_NAME = "input_08_indestructible_nodes_4_bombs.txt";
 //const string INPUT_FILE_NAME = "input_09_patience.txt";
@@ -639,6 +643,10 @@ public:
 	/// Using the initial surveillance nodes' positions and the second turn positions get the possible directions for nodes
 	void fillPossibleSNodesDirections();
 
+	/// Use the calculated directions for the surveillnace nodes and init them for the current turn
+	/// @param[in] directions the correct directions for the surveillance nodes
+	void initNodesForTurn(const vector<Direction>& directions);
+
 private:
 	/// All nodes scatered across the grid
 	SNode sNodes[ALL_CELLS];
@@ -1203,6 +1211,11 @@ void Grid::claculateSNodesMovementDirections(int depth, const vector<Direction>&
 		moveSNodes(directionsToTest, simulationGrid);
 		moveSNodes(directionsToTest, simulationGrid);
 		nodesMovementCalculated = checkNodesInitialPositions();
+
+		if (nodesMovementCalculated) {
+			initNodesForTurn(directionsToTest);
+		}
+
 		return;
 	}
 
@@ -1287,6 +1300,18 @@ void Grid::fillPossibleSNodesDirections() {
 				sNode.init(sNodeRow, sNodeCol, sNode.getPossibleDirection(0));
 			}
 		}
+	}
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Grid::initNodesForTurn(const vector<Direction>& directions) {
+	for (int nodeIdx = 0; nodeIdx < sNodesCount; ++nodeIdx) {
+		SNode& sNode = sNodes[nodeIdx];
+
+		// SNode is moved for the current turn to get its right direction, so use this position
+		sNode.init(sNode.getRow(), sNode.getCol(), directions[nodeIdx]);
 	}
 }
 
