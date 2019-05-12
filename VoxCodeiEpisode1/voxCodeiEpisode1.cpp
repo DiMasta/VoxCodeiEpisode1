@@ -24,7 +24,12 @@ using namespace std;
 
 //const string INPUT_FILE_NAME = "input.txt";
 //const string INPUT_FILE_NAME = "input_03_6_moving_nodes_6_bombs.txt";
+//const string INPUT_FILE_NAME = "input_05_9_moving_nodes_9_bombs.txt";
 const string INPUT_FILE_NAME = "input_07_indestructible_nodes.txt";
+//const string INPUT_FILE_NAME = "input_08_indestructible_nodes_4_bombs.txt";
+//const string INPUT_FILE_NAME = "input_09_patience.txt";
+//const string INPUT_FILE_NAME = "input_10_vandalism.txt";
+
 const string OUTPUT_FILE_NAME = "output.txt";
 
 const string WAIT = "WAIT";
@@ -1254,27 +1259,33 @@ void Grid::fillPossibleSNodesDirections() {
 		const int sNodeRow = sNode.getRow();
 		const int sNodeCol = sNode.getCol();
 
-		for (const Direction direction : directions) {
-			int rowNeighbour = sNodeRow;
-			int colNeighbour = sNodeCol;
-
-			rowNeighbour += MOVE_IN_ROWS[static_cast<int>(direction)];
-			colNeighbour += MOVE_IN_COLS[static_cast<int>(direction)];
-
-			if (rowNeighbour < 0 || rowNeighbour >= height || colNeighbour < 0 || colNeighbour >= width) {
-				continue;
-			}
-
-			if (SURVEILLANCE_NODE & turnGrid[rowNeighbour][colNeighbour]) {
-				const int rowDiff = sNodeRow - rowNeighbour;
-				const int colDiff = sNodeCol - colNeighbour;
-
-				sNode.addPossibleDirection(direction);
-			}
+		if (SURVEILLANCE_NODE & turnGrid[sNodeRow][sNodeCol]) {
+			sNode.init(sNodeRow, sNodeCol, Direction::INVALID);
+			sNode.addPossibleDirection(Direction::INVALID); // Add only one possible direction, its needed when determining all directions
 		}
+		else {
+			for (const Direction direction : directions) {
+				int rowNeighbour = sNodeRow;
+				int colNeighbour = sNodeCol;
 
-		if (1 == sNode.getPossibleDirectionsCount()) {
-			sNode.init(sNodeRow, sNodeCol, sNode.getPossibleDirection(0));
+				rowNeighbour += MOVE_IN_ROWS[static_cast<int>(direction)];
+				colNeighbour += MOVE_IN_COLS[static_cast<int>(direction)];
+
+				if (rowNeighbour < 0 || rowNeighbour >= height || colNeighbour < 0 || colNeighbour >= width) {
+					continue;
+				}
+
+				if (SURVEILLANCE_NODE & turnGrid[rowNeighbour][colNeighbour]) {
+					const int rowDiff = sNodeRow - rowNeighbour;
+					const int colDiff = sNodeCol - colNeighbour;
+
+					sNode.addPossibleDirection(direction);
+				}
+			}
+
+			if (1 == sNode.getPossibleDirectionsCount()) {
+				sNode.init(sNodeRow, sNodeCol, sNode.getPossibleDirection(0));
+			}
 		}
 	}
 }
