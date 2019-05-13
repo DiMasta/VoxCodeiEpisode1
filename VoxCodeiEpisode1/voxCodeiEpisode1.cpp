@@ -25,11 +25,11 @@ using namespace std;
 //const string INPUT_FILE_NAME = "input.txt";
 //const string INPUT_FILE_NAME = "input_01_one_moving_node.txt";
 //const string INPUT_FILE_NAME = "input_02_2_moving_nodes_2_bombs.txt";
-//const string INPUT_FILE_NAME = "input_03_6_moving_nodes_6_bombs.txt";
+const string INPUT_FILE_NAME = "input_03_6_moving_nodes_6_bombs.txt";
 //const string INPUT_FILE_NAME = "input_04_2_moving_nodes_1_bombs.txt";
 //const string INPUT_FILE_NAME = "input_05_9_moving_nodes_9_bombs.txt";
 //const string INPUT_FILE_NAME = "input_06_moving_nodes_1_bombs.txt";
-const string INPUT_FILE_NAME = "input_07_indestructible_nodes.txt";
+//const string INPUT_FILE_NAME = "input_07_indestructible_nodes.txt";
 //const string INPUT_FILE_NAME = "input_08_indestructible_nodes_4_bombs.txt";
 //const string INPUT_FILE_NAME = "input_09_patience.txt";
 //const string INPUT_FILE_NAME = "input_10_vandalism.txt";
@@ -720,32 +720,19 @@ Grid::Grid() :
 //*************************************************************************************************************
 
 void Grid::createCell(int rowIdx, int colIdx, int turnIdx, Cell cell) {
-	if (0 == turnIdx) {
-		initialGrid[rowIdx][colIdx] = cell;
-
-		if (SURVEILLANCE_NODE == cell) {
-			createSNode(rowIdx, colIdx, turnIdx);
-			cell |= 1; // One node in cell
-		}
-		else if (EMPTY == cell) {
-			cell = EMPTY_FLAG; // Using flag, beacuse '.' uses more bits in the char
-		}
-
-		initialGrid[rowIdx][colIdx] = cell;
+	if (SURVEILLANCE_NODE == cell) {
+		cell |= 1; // One node in cell
+	}
+	else if (EMPTY == cell) {
+		cell = EMPTY_FLAG; // Using flag, beacuse '.' uses more bits in the char
 	}
 
-	//if (turnIdx <= SECOND_TURN) {
-	//	if (SURVEILLANCE_NODE == cell) {
-	//		// Create snode, based on the intial grid positions of nodes
-	//		createSNode(rowIdx, colIdx, turnIdx);
-	//		cell |= 1; // One node in cell
-	//	}
-	//	else if (EMPTY == cell) {
-	//		cell = EMPTY_FLAG; // Using flag, beacuse '.' uses more bits in the char
-	//	}
-	//
-	//	grid[rowIdx][colIdx] = cell;
-	//}
+	if (0 == turnIdx) {
+		if (SURVEILLANCE_NODE & cell) {
+			createSNode(rowIdx, colIdx, turnIdx);
+		}
+		initialGrid[rowIdx][colIdx] = cell;
+	}
 
 	// Every turn fill the turn grid
 	turnGrid[rowIdx][colIdx] = cell;
@@ -755,7 +742,7 @@ void Grid::createCell(int rowIdx, int colIdx, int turnIdx, Cell cell) {
 //*************************************************************************************************************
 
 Cell Grid::getCell(int rowIdx, int colIdx) const {
-	return grid[rowIdx][colIdx];
+	return simulationGrid[rowIdx][colIdx];
 }
 
 //*************************************************************************************************************
@@ -764,7 +751,7 @@ Cell Grid::getCell(int rowIdx, int colIdx) const {
 void Grid::evaluateGridCells(int simulationStartRound) {
 	for (int rowIdx = 0; rowIdx < height; ++rowIdx) {
 		for (int colIdx = 0; colIdx < width; ++colIdx) {
-			const Cell& cell = grid[rowIdx][colIdx];
+			const Cell& cell = simulationGrid[rowIdx][colIdx];
 
 			// Consider empty and surveillance node as possible places for bombs
 			// Now snodes moves so in previous turns bomb may be placed on that cell(if it is empty on that turn)
@@ -1087,9 +1074,11 @@ void Grid::createSNode(int rowIdx, int colIdx, int turnIdx) {
 //*************************************************************************************************************
 
 void Grid::simulateAllRounds(int simulationStartRound) {
+	resetForSimulation(SimulationType::BEST_ACTIONS);
+
 	for (int roundIdx = simulationStartRound; roundIdx < roundsLeft; ++roundIdx) {
 		vector<Direction> directions(0);
-		moveSNodes(directions, grid);
+		moveSNodes(directions, simulationGrid);
 
 		// First two turns just move the nodes, so when the bomb is placed it affetct in right turn
 		if (roundIdx >= simulationStartRound + (BOMB_ROUNDS_TO_EXPLODE - 1)) {
