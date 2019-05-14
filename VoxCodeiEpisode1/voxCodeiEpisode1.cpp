@@ -17,22 +17,22 @@
 
 using namespace std;
 
-//#define REDIRECT_CIN_FROM_FILE
-//#define REDIRECT_COUT_TO_FILE
+#define REDIRECT_CIN_FROM_FILE
+#define REDIRECT_COUT_TO_FILE
 //#define DEBUG_ONE_TURN
 //#define OUTPUT_GAME_DATA
 
 //const string INPUT_FILE_NAME = "input.txt";
 //const string INPUT_FILE_NAME = "input_01_one_moving_node.txt";
 //const string INPUT_FILE_NAME = "input_02_2_moving_nodes_2_bombs.txt";
-const string INPUT_FILE_NAME = "input_03_6_moving_nodes_6_bombs.txt";
+//const string INPUT_FILE_NAME = "input_03_6_moving_nodes_6_bombs.txt";
 //const string INPUT_FILE_NAME = "input_04_2_moving_nodes_1_bombs.txt";
 //const string INPUT_FILE_NAME = "input_05_9_moving_nodes_9_bombs.txt";
 //const string INPUT_FILE_NAME = "input_06_moving_nodes_1_bombs.txt";
 //const string INPUT_FILE_NAME = "input_07_indestructible_nodes.txt";
 //const string INPUT_FILE_NAME = "input_08_indestructible_nodes_4_bombs.txt";
 //const string INPUT_FILE_NAME = "input_09_patience.txt";
-//const string INPUT_FILE_NAME = "input_10_vandalism.txt";
+const string INPUT_FILE_NAME = "input_10_vandalism.txt";
 
 const string OUTPUT_FILE_NAME = "output.txt";
 
@@ -115,16 +115,16 @@ static const int MOVE_IN_COLS[DIRECTIONS_COUNT] = { 0, 0, -1, 1 };
 /// (-1, -1) represents "WAIT" action, needed when a bomb must be placed on not yet destroyed sureveillance node
 struct Action {
 	/// By default set the invalid action, that means "WAIT"
-	Action() : row(INVALID_IDX), col(INVALID_IDX), afffectedSNodesCount(0), palcementRound(INVALID_IDX) {}
-	Action(int row, int col, int afffectedSNodesCount, int palcementRound) :
-		row(row), col(col), afffectedSNodesCount(afffectedSNodesCount), palcementRound(palcementRound) {}
+	Action() : row(INVALID_IDX), col(INVALID_IDX), affectedSNodesCount(0), palcementRound(INVALID_IDX) {}
+	Action(int row, int col, int affectedSNodesCount, int palcementRound) :
+		row(row), col(col), affectedSNodesCount(affectedSNodesCount), palcementRound(palcementRound) {}
 
 	/// Set the default values
 	void init();
 
 	int row; ///< where to place the bomb
 	int col; ///< where to place the bomb
-	int afffectedSNodesCount; ///< How many surveillance nodes are affected for this cell
+	int affectedSNodesCount; ///< How many surveillance nodes are affected for this cell
 	int palcementRound; ///< The round when the bomb should be placed
 };
 
@@ -134,16 +134,16 @@ struct Action {
 void Action::init() {
 	row = INVALID_IDX;
 	col = INVALID_IDX;
-	afffectedSNodesCount = 0;
+	affectedSNodesCount = 0;
 }
 
 //*************************************************************************************************************
 //*************************************************************************************************************
 
 bool biggestAction(const Action& lhs, const Action& rhs) {
-	bool res = lhs.afffectedSNodesCount > rhs.afffectedSNodesCount;
+	bool res = lhs.affectedSNodesCount > rhs.affectedSNodesCount;
 
-	//if (lhs.afffectedSNodesCount == rhs.afffectedSNodesCount) {
+	//if (lhs.affectedSNodesCount == rhs.affectedSNodesCount) {
 	//	res = lhs.palcementRound < rhs.palcementRound;
 	//}
 
@@ -544,17 +544,23 @@ public:
 	/// Store the given action, in which cell to place a bomb
 	/// @param[in] rowIdx the index of the row, to place a bomb
 	/// @param[in] colIdx the index of the column, to place a bomb
-	/// @param[in] afffectedSNodesCount how many sureveillance nodes are affected from this cell
+	/// @param[in] affectedSNodesCount how many sureveillance nodes are affected from this cell
 	/// @param[in] palcementRound the round when the bomb should be placed
-	void addAction(int rowIdx, int colIdx, int afffectedSNodesCount, int palcementRound);
+	void addAction(int rowIdx, int colIdx, int affectedSNodesCount, int palcementRound);
+
+	/// Check if action for the given cell and affected nodes already exists
+	/// @param[in] rowIdx the index of the row, to place a bomb
+	/// @param[in] colIdx the index of the column, to place a bomb
+	/// @param[in] affectedSNodesCount how many sureveillance nodes are affected from this cell
+	bool actionAlreadyAdded(int rowIdx, int colIdx, int affectedSNodesCount) const;
 
 	/// Ovewrite the actionIdx-th action, in which cell to place a bomb
 	/// @param[in] actionIdx action's index
 	/// @param[in] rowIdx the index of the row, to place a bomb
 	/// @param[in] colIdx the index of the column, to place a bomb
-	/// @param[in] afffectedSNodesCount how many sureveillance nodes are affected from this cell
+	/// @param[in] affectedSNodesCount how many sureveillance nodes are affected from this cell
 	/// @param[in] palcementRound the round when the bomb should be placed
-	void setAction(int actionIdx, int rowIdx, int colIdx, int afffectedSNodesCount, int palcementRound);
+	void setAction(int actionIdx, int rowIdx, int colIdx, int affectedSNodesCount, int palcementRound);
 
 	/// Get action with given index
 	/// @param[in] actionIdx action's index
@@ -751,7 +757,7 @@ void Grid::evaluateGridCells(int simulationStartRound) {
 
 			// Consider empty and surveillance node as possible places for bombs
 			// Now snodes moves so in previous turns bomb may be placed on that cell(if it is empty on that turn)
-			if (WALL != cell) {
+			if (WALL != cell && !(SURVEILLANCE_NODE & cell)) {
 				// This the count of nodes if the bomb explodes, so the placement of the bomb should be 2 turns before this
 				const int surveillanceNodesInRange = countSurveillanceNodesInRange(rowIdx, colIdx);
 
@@ -760,7 +766,7 @@ void Grid::evaluateGridCells(int simulationStartRound) {
 					const int placementRound = simulationStartRound - (BOMB_ROUNDS_TO_EXPLODE - 1);
 
 					// Ignore cells where only one node will be destroyed, not sure if this is right
-					if (surveillanceNodesInRange > 1 || 1 == sNodesCount) {
+					if (surveillanceNodesInRange > 2 || 1 == sNodesCount) {
 						addAction(rowIdx, colIdx, surveillanceNodesInRange, placementRound);
 					}
 
@@ -825,17 +831,38 @@ int Grid::countSurveillanceNodesInRangeForDirection(int rowIdx, int colIdx, Dire
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::addAction(int rowIdx, int colIdx, int afffectedSNodesCount, int palcementRound) {
-	if (actionsCount < MAX_ACTIONS_COUNT) {
-		actions[actionsCount++] = Action(rowIdx, colIdx, afffectedSNodesCount, palcementRound);
+void Grid::addAction(int rowIdx, int colIdx, int affectedSNodesCount, int palcementRound) {
+	// Check if action for the same coordinate and number of nodes is already added
+	// I thinf there is no need to add it multiple times for future rounds, because in previous they will be destroyed
+
+	if (actionsCount < MAX_ACTIONS_COUNT && !actionAlreadyAdded(rowIdx, colIdx, affectedSNodesCount)) {
+		actions[actionsCount++] = Action(rowIdx, colIdx, affectedSNodesCount, palcementRound);
 	}
 }
 
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::setAction(int actionIdx, int rowIdx, int colIdx, int afffectedSNodesCount, int palcementRound) {
-	actions[actionIdx] = Action(rowIdx, colIdx, afffectedSNodesCount, palcementRound);
+bool Grid::actionAlreadyAdded(int rowIdx, int colIdx, int affectedSNodesCount) const {
+	bool exists = false;
+
+	for (int actionIdx = 0; actionIdx < actionsCount; ++actionIdx) {
+		const Action& action = actions[actionIdx];
+
+		if (action.row == rowIdx && action.col == colIdx /*&& action.affectedSNodesCount == affectedSNodesCount*/) {
+			exists = true;
+			break;
+		}
+	}
+
+	return exists;
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Grid::setAction(int actionIdx, int rowIdx, int colIdx, int affectedSNodesCount, int palcementRound) {
+	actions[actionIdx] = Action(rowIdx, colIdx, affectedSNodesCount, palcementRound);
 }
 
 //*************************************************************************************************************
@@ -881,7 +908,7 @@ void Grid::recursiveDFSActions(int turnIdx, unsigned int recursionFlags, int dep
 	}
 
 	// TODO: actionsCount may become too big and that would cause problems
-	for (int actionIdx = 0; actionIdx < MAX_ACTIONS_TO_CHECK; ++actionIdx) {
+	for (int actionIdx = 0; actionIdx < actionsCount; ++actionIdx) {
 		if (solutionFound) {
 			break;
 		}
