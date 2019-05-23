@@ -652,6 +652,12 @@ public:
 	/// Use the calculated directions for the surveillnace nodes and init them for the current turn
 	void initNodesForTurn();
 
+	/// Find if the vector of actions already contains action of the round of the given actions[actionIdx]
+	/// @param[in] actionsToPerform array of actions indecies to check so far
+	/// @param[in] actionIdx index of action which to add to the actions for check
+	/// @return true if the given vectore already contains an action for the actions[actionIdx] round
+	bool containsActionForThisRound(const vector<int>& actionsToPerform, int actionIdx) const;
+
 private:
 	/// All nodes scatered across the grid
 	SNode sNodes[ALL_CELLS];
@@ -911,6 +917,10 @@ void Grid::recursiveDFSActions(int turnIdx, unsigned int recursionFlags, int dep
 	for (int actionIdx = 0; actionIdx < actionsCount; ++actionIdx) {
 		if (solutionFound) {
 			break;
+		}
+
+		if (containsActionForThisRound(actionsToPerform, actionIdx)) {
+			continue;
 		}
 
 		const unsigned int actionBit = 1 << actionIdx;
@@ -1277,6 +1287,27 @@ void Grid::initNodesForTurn() {
 		// SNode is moved for the current turn to get its right direction, so use this position
 		sNode.init(sNode.getRow(), sNode.getCol(), sNode.getDirection());
 	}
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+bool Grid::containsActionForThisRound(const vector<int>& actionsToPerform, int actionIdx) const {
+	bool contains = false;
+	const Action& nextAction = actions[actionIdx];
+
+	for (int actionIdx : actionsToPerform) {
+		const Action& actionToCheck = actions[actionIdx];
+
+		const bool samePosition = nextAction.row == actionToCheck.row && nextAction.col == actionToCheck.col;
+
+		if (nextAction.palcementRound == actionToCheck.palcementRound) {
+			contains = true;
+			break;
+		}
+	}
+
+	return contains;
 }
 
 //-------------------------------------------------------------------------------------------------------------
