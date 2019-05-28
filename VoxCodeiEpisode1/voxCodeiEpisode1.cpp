@@ -533,8 +533,9 @@ public:
 	/// @param[in] rowIdx the index of the row, for the cell to check
 	/// @param[in] colIdx the index of the column, for the cell to check
 	/// @param[out] affectsMovingNode true if moving node is affected
+	/// @param[out] affectedSNodesIndecies which sureveillnace nodes are affected
 	/// @return surveillance nodes in range count
-	int countSurveillanceNodesInRange(int rowIdx, int colIdx, bool& affectsMovingNode) const;
+	int countSurveillanceNodesInRange(int rowIdx, int colIdx, bool& affectsMovingNode, set<int>& affectedSNodesIndecies) const;
 
 	/// Count how many surveillance nodes will be affected, in certain direction,
 	/// if a bomb is placed in the cell with the given coordinates
@@ -542,22 +543,25 @@ public:
 	/// @param[in] colIdx the index of the column, for the cell to check
 	/// @param[in] direction the direction for which to check
 	/// @param[out] affectsMovingNode true if moving node is affected
+	/// @param[out] affectedSNodesIndecies which sureveillnace nodes are affected
 	/// @return surveillance nodes in range count
-	int countSurveillanceNodesInRangeForDirection(int rowIdx, int colIdx, Direction direction, bool& affectsMovingNode) const;
+	int countSurveillanceNodesInRangeForDirection(int rowIdx, int colIdx, Direction direction, bool& affectsMovingNode, set<int>& affectedSNodesIndecies) const;
 
 	/// Store the given action, in which cell to place a bomb
 	/// @param[in] rowIdx the index of the row, to place a bomb
 	/// @param[in] colIdx the index of the column, to place a bomb
 	/// @param[in] affectedSNodesCount how many sureveillance nodes are affected from this cell
 	/// @param[in] palcementRound the round when the bomb should be placed
-	void addAction(int rowIdx, int colIdx, int affectedSNodesCount, int palcementRound);
+	/// @param[in] affectedSNodesIndecies which sureveillnace nodes are affected
+	void addAction(int rowIdx, int colIdx, int affectedSNodesCount, int palcementRound, const set<int>& affectedSNodesIndecies);
 
 	/// Check if action for the given cell and affected nodes already exists
 	/// @param[in] rowIdx the index of the row, to place a bomb
 	/// @param[in] colIdx the index of the column, to place a bomb
 	/// @param[in] affectedSNodesCount how many sureveillance nodes are affected from this cell
 	/// @param[in] palcementRound the round when the bomb should be placed
-	bool actionAlreadyAdded(int rowIdx, int colIdx, int affectedSNodesCount, int palcementRound);
+	/// @param[in] affectedSNodesIndecies which sureveillnace nodes are affected
+	bool actionAlreadyAdded(int rowIdx, int colIdx, int affectedSNodesCount, int palcementRound, const set<int>& affectedSNodesIndecies);
 
 	/// Ovewrite the actionIdx-th action, in which cell to place a bomb
 	/// @param[in] actionIdx action's index
@@ -663,9 +667,21 @@ public:
 	/// @return true if the given vectore already contains an action for the actions[actionIdx] round
 	bool containsActionForThisRound(const vector<int>& actionsToPerform, int actionIdx) const;
 
+	/// Fill which actions, which surveillance nodes are targetting
+	/// @param[in] actionIdx the action index
+	/// @param[in] affectedSNodesIndecies the affected surveillance nodes
+	void fillSNodesActionTargets(int actionIdx, const set<int>& affectedSNodesIndecies);
+
+	/// Intersect all actions affecting all nodes to find the needed actions combination
+	/// @return set of actions affecting all surveillance nodes on the board
+	set<int> intersectAllActionsForSNodes();
+
 private:
 	/// All nodes scatered across the grid
 	SNode sNodes[ALL_CELLS];
+
+	/// Which surveillance nodes are targetted by which actions
+	set<int> sNodesActions[ALL_CELLS];
 
 	/// All possible actions for the grid, including placing bombs on nodes (after thery are destroyed)
 	Action actions[MAX_ACTIONS_COUNT];
@@ -772,16 +788,19 @@ void Grid::evaluateGridCells(int simulationStartRound) {
 				// Add the action only if a moving node is affected
 				bool affectsMovingNode = false;
 
+				// Which surveillance nodes this action is affecting
+				set<int> affectedSNodesIndecies;
+
 				// This the count of nodes if the bomb explodes, so the placement of the bomb should be 2 turns before this
-				const int surveillanceNodesInRange = countSurveillanceNodesInRange(rowIdx, colIdx, affectsMovingNode);
+				const int surveillanceNodesInRange = countSurveillanceNodesInRange(rowIdx, colIdx, affectsMovingNode, affectedSNodesIndecies);
 
 				// If the nodes in range are 0 do not set the char to 0, because it is NULL and will terminate the row
 				if (surveillanceNodesInRange) {
 					const int placementRound = simulationStartRound - (BOMB_ROUNDS_TO_EXPLODE - 1);
 
 					// Ignore cells where only one node will be destroyed, not sure if this is right
-					if ((surveillanceNodesInRange > 2 && affectsMovingNode) || 1 == sNodesCount) {
-						addAction(rowIdx, colIdx, surveillanceNodesInRange, placementRound);
+					if ((surveillanceNodesInRange > 2 /*&& affectsMovingNode*/) || 1 == sNodesCount) {
+						addAction(rowIdx, colIdx, surveillanceNodesInRange, placementRound, affectedSNodesIndecies);
 					}
 
 					// Only one action is needed to destroy all surveillance nodes
@@ -804,12 +823,12 @@ void Grid::evaluateGridCells(int simulationStartRound) {
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-int Grid::countSurveillanceNodesInRange(int rowIdx, int colIdx, bool& affectsMovingNode) const {
+int Grid::countSurveillanceNodesInRange(int rowIdx, int colIdx, bool& affectsMovingNode, set<int>& affectedSNodesIndecies) const {
 	// If the current cell contains surveillance count them
 	int affectedNodesCount = getCellSNodesCount(getCell(rowIdx, colIdx));
 
 	for (const Direction direction : directions) {
-		affectedNodesCount += countSurveillanceNodesInRangeForDirection(rowIdx, colIdx, direction, affectsMovingNode);
+		affectedNodesCount += countSurveillanceNodesInRangeForDirection(rowIdx, colIdx, direction, affectsMovingNode, affectedSNodesIndecies);
 	}
 
 	return affectedNodesCount;
@@ -818,7 +837,7 @@ int Grid::countSurveillanceNodesInRange(int rowIdx, int colIdx, bool& affectsMov
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-int Grid::countSurveillanceNodesInRangeForDirection(int rowIdx, int colIdx, Direction direction, bool& affectsMovingNode) const {
+int Grid::countSurveillanceNodesInRangeForDirection(int rowIdx, int colIdx, Direction direction, bool& affectsMovingNode, set<int>& affectedSNodesIndecies) const {
 	int affectedNodesCount = 0;
 
 	for (int range = 0; range < BOMB_RADIUS; ++range) {
@@ -836,9 +855,11 @@ int Grid::countSurveillanceNodesInRangeForDirection(int rowIdx, int colIdx, Dire
 
 			for (int sNodeIdx = 0; sNodeIdx < sNodesCount; ++sNodeIdx) {
 				const SNode& sNode = sNodes[sNodeIdx];
-				if (rowIdx == sNode.getRow() && colIdx == sNode.getCol() && Direction::INVALID != sNode.getDirection()) {
-					affectsMovingNode = true;
-					break;
+				if (rowIdx == sNode.getRow() && colIdx == sNode.getCol() /*&& Direction::INVALID != sNode.getDirection()*/) {
+					//affectsMovingNode = true;
+					//break;
+
+					affectedSNodesIndecies.insert(sNodeIdx);
 				}
 			}
 		}
@@ -853,11 +874,12 @@ int Grid::countSurveillanceNodesInRangeForDirection(int rowIdx, int colIdx, Dire
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::addAction(int rowIdx, int colIdx, int affectedSNodesCount, int palcementRound) {
+void Grid::addAction(int rowIdx, int colIdx, int affectedSNodesCount, int palcementRound, const set<int>& affectedSNodesIndecies) {
 	// Check if action for the same coordinate and number of nodes is already added
 	// I thinf there is no need to add it multiple times for future rounds, because in previous they will be destroyed
 
-	if (actionsCount < MAX_ACTIONS_COUNT && !actionAlreadyAdded(rowIdx, colIdx, affectedSNodesCount, palcementRound)) {
+	if (actionsCount < MAX_ACTIONS_COUNT && !actionAlreadyAdded(rowIdx, colIdx, affectedSNodesCount, palcementRound, affectedSNodesIndecies)) {
+		fillSNodesActionTargets(actionsCount, affectedSNodesIndecies);
 		actions[actionsCount++] = Action(rowIdx, colIdx, affectedSNodesCount, palcementRound);
 	}
 }
@@ -865,13 +887,14 @@ void Grid::addAction(int rowIdx, int colIdx, int affectedSNodesCount, int palcem
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-bool Grid::actionAlreadyAdded(int rowIdx, int colIdx, int affectedSNodesCount, int palcementRound) {
+bool Grid::actionAlreadyAdded(int rowIdx, int colIdx, int affectedSNodesCount, int palcementRound, const set<int>& affectedSNodesIndecies) {
 	bool exists = false;
 
 	for (int actionIdx = 0; actionIdx < actionsCount; ++actionIdx) {
 		Action& action = actions[actionIdx];
 
 		if (action.row == rowIdx && action.col == colIdx) {
+			fillSNodesActionTargets(actionIdx, affectedSNodesIndecies);
 			action.palcementRounds.push_back(palcementRound);
 			exists = true;
 			break;
@@ -1327,6 +1350,46 @@ bool Grid::containsActionForThisRound(const vector<int>& actionsToPerform, int a
 	return contains;
 }
 
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Grid::fillSNodesActionTargets(int actionIdx, const set<int>& affectedSNodesIndecies) {
+	for (int sNodeIdx : affectedSNodesIndecies) {
+		sNodesActions[sNodeIdx].insert(actionIdx);
+	}
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+set<int> Grid::intersectAllActionsForSNodes() {
+	set<int> lastIntersection = sNodesActions[0];
+	set<int> currentIntersection;
+	
+	for (int actionSetIdx = 1; actionSetIdx < sNodesCount; ++actionSetIdx) {
+		set_intersection(
+			lastIntersection.begin(), lastIntersection.end(),
+			sNodesActions[actionSetIdx].begin(), sNodesActions[actionSetIdx].end(),
+			inserter(currentIntersection, currentIntersection.begin())
+		);
+	
+		swap(lastIntersection, currentIntersection);
+		currentIntersection.clear();
+	}
+
+	//int actionsTable[MAX_ACTIONS_COUNT]{};
+	//
+	//for (int actionSetIdx = 0; actionSetIdx < sNodesCount; ++actionSetIdx) {
+	//	const set<int>& s = sNodesActions[actionSetIdx];
+	//
+	//	for (int actionIdx : s) {
+	//		++actionsTable[actionIdx];
+	//	}
+	//}
+
+	return lastIntersection;
+}
+
 //-------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------
@@ -1474,7 +1537,8 @@ void Game::turnBegin() {
 		firewallGrid.simulateAllRounds(turnsCount);
 
 		if (!firewallGrid.getSolutionFound()) {
-			firewallGrid.sortActions();
+			//firewallGrid.sortActions();
+			set<int> intersection = firewallGrid.intersectAllActionsForSNodes();
 
 			// Test dfs with unlimitted time, maybe it's not nice place to use dfs here
 			firewallGrid.dfsActions(turnsCount);
