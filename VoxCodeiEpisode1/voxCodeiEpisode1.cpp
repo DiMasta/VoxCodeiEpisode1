@@ -681,7 +681,7 @@ private:
 	SNode sNodes[ALL_CELLS];
 
 	/// Which surveillance nodes are targetted by which actions
-	set<int> sNodesActions[ALL_CELLS];
+	set<int> sNodesDestroyActionsSets[ALL_CELLS];
 
 	/// All possible actions for the grid, including placing bombs on nodes (after thery are destroyed)
 	Action actions[MAX_ACTIONS_COUNT];
@@ -1355,7 +1355,7 @@ bool Grid::containsActionForThisRound(const vector<int>& actionsToPerform, int a
 
 void Grid::fillSNodesActionTargets(int actionIdx, const set<int>& affectedSNodesIndecies) {
 	for (int sNodeIdx : affectedSNodesIndecies) {
-		sNodesActions[sNodeIdx].insert(actionIdx);
+		sNodesDestroyActionsSets[sNodeIdx].insert(actionIdx);
 	}
 }
 
@@ -1363,13 +1363,13 @@ void Grid::fillSNodesActionTargets(int actionIdx, const set<int>& affectedSNodes
 //*************************************************************************************************************
 
 set<int> Grid::intersectAllActionsForSNodes() {
-	set<int> lastIntersection = sNodesActions[0];
+	set<int> lastIntersection = sNodesDestroyActionsSets[0];
 	set<int> currentIntersection;
 	
 	for (int actionSetIdx = 1; actionSetIdx < sNodesCount; ++actionSetIdx) {
 		set_intersection(
 			lastIntersection.begin(), lastIntersection.end(),
-			sNodesActions[actionSetIdx].begin(), sNodesActions[actionSetIdx].end(),
+			sNodesDestroyActionsSets[actionSetIdx].begin(), sNodesDestroyActionsSets[actionSetIdx].end(),
 			inserter(currentIntersection, currentIntersection.begin())
 		);
 	
@@ -1380,7 +1380,7 @@ set<int> Grid::intersectAllActionsForSNodes() {
 	//int actionsTable[MAX_ACTIONS_COUNT]{};
 	//
 	//for (int actionSetIdx = 0; actionSetIdx < sNodesCount; ++actionSetIdx) {
-	//	const set<int>& s = sNodesActions[actionSetIdx];
+	//	const set<int>& s = sNodesDestroyActionsSets[actionSetIdx];
 	//
 	//	for (int actionIdx : s) {
 	//		++actionsTable[actionIdx];
