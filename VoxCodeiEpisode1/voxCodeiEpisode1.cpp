@@ -25,14 +25,14 @@ using namespace std;
 //const string INPUT_FILE_NAME = "input.txt";
 //const string INPUT_FILE_NAME = "input_01_one_moving_node.txt";
 //const string INPUT_FILE_NAME = "input_02_2_moving_nodes_2_bombs.txt";
-const string INPUT_FILE_NAME = "input_03_6_moving_nodes_6_bombs.txt";
+//const string INPUT_FILE_NAME = "input_03_6_moving_nodes_6_bombs.txt";
 //const string INPUT_FILE_NAME = "input_04_2_moving_nodes_1_bombs.txt";
 //const string INPUT_FILE_NAME = "input_05_9_moving_nodes_9_bombs.txt";
 //const string INPUT_FILE_NAME = "input_06_moving_nodes_1_bombs.txt";
 //const string INPUT_FILE_NAME = "input_07_indestructible_nodes.txt";
 //const string INPUT_FILE_NAME = "input_08_indestructible_nodes_4_bombs.txt";
 //const string INPUT_FILE_NAME = "input_09_patience.txt";
-//const string INPUT_FILE_NAME = "input_10_vandalism.txt";
+const string INPUT_FILE_NAME = "input_10_vandalism.txt";
 
 const string OUTPUT_FILE_NAME = "output.txt";
 
@@ -50,7 +50,7 @@ static const int PAIR = 2;
 
 static const int MAX_HEIGHT = 19;
 static const int MAX_WIDTH = 19;
-static const int MAX_BOMBS = 9;
+static const int MAX_BOMBS = 10;
 static const int MAX_ROUNDS = 19;
 static const int ALL_CELLS = MAX_HEIGHT * MAX_WIDTH;
 static const int MAX_ACTIONS_COUNT = ALL_CELLS * 4;
@@ -548,7 +548,16 @@ public:
 	/// @param[in] colIdx the index of the column, to place a bomb
 	/// @param[in] afffectedSNodesCount how many sureveillance nodes are affected from this cell
 	/// @param[in] palcementRound the round when the bomb should be placed
-	void addAction(int rowIdx, int colIdx, int afffectedSNodesCount, int palcementRound);
+	/// @return the new action index
+	int addAction(int rowIdx, int colIdx, int afffectedSNodesCount, int palcementRound);
+
+	/// Check if action with the given properties is already added, update its placement round if needed
+	/// @param[in] rowIdx the index of the row, to place a bomb
+	/// @param[in] colIdx the index of the column, to place a bomb
+	/// @param[in] afffectedSNodesCount how many sureveillance nodes are affected from this cell
+	/// @param[in] palcementRound the round when the bomb should be placed
+	/// @return the new action index
+	int actionAlreadyAdded(int rowIdx, int colIdx, int afffectedSNodesCount, int palcementRound);
 
 	/// Ovewrite the actionIdx-th action, in which cell to place a bomb
 	/// @param[in] actionIdx action's index
@@ -649,6 +658,7 @@ public:
 	void initNodesForTurn();
 
 private:
+
 	/// All nodes scatered across the grid
 	SNode sNodes[ALL_CELLS];
 
@@ -696,6 +706,9 @@ private:
 
 	/// Marks if we found the correct directions for the movement of the surveillnace nodes
 	bool nodesMovementCalculated;
+
+	/// There is a static node in the level
+	bool staticNode;
 };
 
 //*************************************************************************************************************
@@ -707,7 +720,8 @@ Grid::Grid() :
 	solutionActionsCount(0),
 	bombsCount(0),
 	solutionFound(false),
-	nodesMovementCalculated(false)
+	nodesMovementCalculated(false),
+	staticNode(false)
 {
 	for (int& bestAction : actionsBestSequence) {
 		bestAction = INVALID_IDX;
@@ -751,9 +765,9 @@ void Grid::evaluateGridCells(int simulationStartRound) {
 		for (int colIdx = 0; colIdx < width; ++colIdx) {
 			const Cell& cell = simulationGrid[rowIdx][colIdx];
 
-			// Consider empty and surveillance node as possible places for bombs
-			// Now snodes moves so in previous turns bomb may be placed on that cell(if it is empty on that turn)
-			if (WALL != cell) {
+			// If there are not static nodes, surveillance nodes could be evaluated
+			const bool noStaticNodes = cell != WALL && !staticNode;
+			if ((cell & EMPTY_FLAG) || noStaticNodes) {
 				// Add action if a moving node is targetted by the potential bomb
 				bool affectsMovingNode = false;
 
@@ -763,17 +777,18 @@ void Grid::evaluateGridCells(int simulationStartRound) {
 				// If the nodes in range are 0 do not set the char to 0, because it is NULL and will terminate the row
 				if (surveillanceNodesInRange) {
 					const int placementRound = simulationStartRound - (BOMB_ROUNDS_TO_EXPLODE - 1);
+					int actionIdx = INVALID_IDX;
 
 					// Ignore cells where only one node will be destroyed, not sure if this is right
 					//if (surveillanceNodesInRange > 1 || 1 == sNodesCount) {
 					if ((surveillanceNodesInRange > 2 && affectsMovingNode) || surveillanceNodesInRange == sNodesCount) {
-						addAction(rowIdx, colIdx, surveillanceNodesInRange, placementRound);
+						actionIdx = addAction(rowIdx, colIdx, surveillanceNodesInRange, placementRound);
 					}
 
 					// Only one action is needed to destroy all surveillance nodes
 					if (surveillanceNodesInRange == sNodesCount) {
 						solutionFound = true;
-						actionsBestSequence[placementRound] = actionsCount - 1; // Use the last added action
+						actionsBestSequence[placementRound] = actionIdx;
 						solutionActionsCount = placementRound + 1;
 						break;
 					}
@@ -839,10 +854,39 @@ int Grid::countSurveillanceNodesInRangeForDirection(int rowIdx, int colIdx, Dire
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-void Grid::addAction(int rowIdx, int colIdx, int afffectedSNodesCount, int palcementRound) {
-	if (actionsCount < MAX_ACTIONS_COUNT) {
+int Grid::addAction(int rowIdx, int colIdx, int afffectedSNodesCount, int palcementRound) {
+	int actionIdx = actionAlreadyAdded(rowIdx, colIdx, afffectedSNodesCount, palcementRound);
+
+	if (actionsCount < MAX_ACTIONS_COUNT && INVALID_IDX == actionIdx) {
+		actionIdx = actionsCount;
 		actions[actionsCount++] = Action(rowIdx, colIdx, afffectedSNodesCount, palcementRound);
 	}
+
+	return actionIdx;
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+int Grid::actionAlreadyAdded(int rowIdx, int colIdx, int afffectedSNodesCount, int palcementRound) {
+	int idx = INVALID_IDX;
+
+	for (int actionIdx = 0; actionIdx < actionsCount; ++actionIdx) {
+		Action& action = actions[actionIdx];
+
+		if ((action.row == rowIdx && action.col == colIdx) || action.palcementRound == palcementRound) {
+			idx = actionIdx;
+
+			if (afffectedSNodesCount > action.afffectedSNodesCount) {
+				action.afffectedSNodesCount = afffectedSNodesCount;
+				action.palcementRound = palcementRound;
+			}
+
+			break;
+		}
+	}
+
+	return idx;
 }
 
 //*************************************************************************************************************
@@ -870,10 +914,30 @@ void Grid::sortActions() {
 //*************************************************************************************************************
 
 void Grid::dfsActions(int turnIdx) {
-	vector<int> actionsToPerform;
-	actionsToPerform.reserve(MAX_ACTIONS_TO_CHECK);
+	if (1 == actionsCount - bombsLeft) {
+		vector<int> actionsToPerform{};
+		for (int skipActionIdx = 0; skipActionIdx < actionsCount; ++skipActionIdx) {
+			for (int useActionIdx = 0; useActionIdx < actionsCount; ++useActionIdx) {
+				if (skipActionIdx != useActionIdx) {
+					actionsToPerform.push_back(useActionIdx);
+				}
+			}
 
-	recursiveDFSActions(turnIdx, 0, 0, actionsToPerform);
+			if (!solutionFound) {
+				simulate(turnIdx, actionsToPerform);
+				actionsToPerform.clear();
+			}
+			else {
+				break;
+			}
+		}
+	}
+	else {
+		vector<int> actionsToPerform;
+		actionsToPerform.reserve(MAX_ACTIONS_TO_CHECK);
+
+		recursiveDFSActions(turnIdx, 0, 0, actionsToPerform);
+	}
 }
 
 //*************************************************************************************************************
@@ -894,8 +958,7 @@ void Grid::recursiveDFSActions(int turnIdx, unsigned int recursionFlags, int dep
 		return;
 	}
 
-	// TODO: actionsCount may become too big and that would cause problems
-	for (int actionIdx = 0; actionIdx < MAX_ACTIONS_TO_CHECK; ++actionIdx) {
+	for (int actionIdx = 0; actionIdx < actionsCount; ++actionIdx) {
 		if (solutionFound) {
 			break;
 		}
@@ -1263,6 +1326,10 @@ void Grid::initNodesForTurn() {
 
 		// SNode is moved for the current turn to get its right direction, so use this position
 		sNode.init(sNode.getRow(), sNode.getCol(), sNode.getDirection());
+
+		if (Direction::INVALID == sNode.getDirection()) {
+			staticNode = true;
+		}
 	}
 }
 
