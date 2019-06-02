@@ -59,6 +59,7 @@ static const int BOMB_RADIUS = 3;
 static const int BOMB_ROUNDS_TO_EXPLODE = 3;
 static const int SECOND_TURN = 1;
 static const int THIRD_TURN = 2;
+static const int MAX_ACTIONS_PER_NODE = 4;
 
 /// Flags
 static const unsigned int SOLUTION_FOUND_FLAG =		0b1000'0000'0000'0000'0000'0000'0000'0000;
@@ -1355,7 +1356,11 @@ bool Grid::containsActionForThisRound(const vector<int>& actionsToPerform, int a
 
 void Grid::fillSNodesActionTargets(int actionIdx, const set<int>& affectedSNodesIndecies) {
 	for (int sNodeIdx : affectedSNodesIndecies) {
-		sNodesDestroyActionsSets[sNodeIdx].insert(actionIdx);
+		set<int>& actionsPerNode{ sNodesDestroyActionsSets[sNodeIdx] };
+
+		if (actionsPerNode.size() < MAX_ACTIONS_PER_NODE) {
+			actionsPerNode.insert(actionIdx);
+		}
 	}
 }
 
@@ -1363,31 +1368,48 @@ void Grid::fillSNodesActionTargets(int actionIdx, const set<int>& affectedSNodes
 //*************************************************************************************************************
 
 set<int> Grid::intersectAllActionsForSNodes() {
-	set<int> lastIntersection = sNodesDestroyActionsSets[0];
-	set<int> currentIntersection;
-	
-	for (int actionSetIdx = 1; actionSetIdx < sNodesCount; ++actionSetIdx) {
-		set_intersection(
-			lastIntersection.begin(), lastIntersection.end(),
-			sNodesDestroyActionsSets[actionSetIdx].begin(), sNodesDestroyActionsSets[actionSetIdx].end(),
-			inserter(currentIntersection, currentIntersection.begin())
-		);
-	
-		swap(lastIntersection, currentIntersection);
-		currentIntersection.clear();
+	set<set<int>> T;
+	for (int e : sNodesDestroyActionsSets[0]) {
+		set<int> eSet{ e };
+
+		T.insert(eSet);
 	}
 
-	//int actionsTable[MAX_ACTIONS_COUNT]{};
-	//
-	//for (int actionSetIdx = 0; actionSetIdx < sNodesCount; ++actionSetIdx) {
-	//	const set<int>& s = sNodesDestroyActionsSets[actionSetIdx];
-	//
-	//	for (int actionIdx : s) {
-	//		++actionsTable[actionIdx];
-	//	}
-	//}
+	for (int setIdx = 1; setIdx < sNodesCount; ++setIdx) {
+		const set<int>& s = sNodesDestroyActionsSets[setIdx];
 
-	return lastIntersection;
+		set<set<int>> newT;
+		for (const set<int>& tSet : T) {
+			for (int e : s) {
+				set<int> newTSet = tSet;
+				newTSet.insert(e);
+
+				newT.insert(newTSet);
+			}
+		}
+
+		// Transversal newT
+		set<set<int>> containingSubset;
+		for (const set<int>& subset : newT) {
+			for (const set<int>& containsSubset : newT) {
+				if (subset != containsSubset) {
+					const bool isSubset = includes(containsSubset.begin(), containsSubset.end(), subset.begin(), subset.end());
+
+					if (isSubset) {
+						containingSubset.insert(containsSubset);
+					}
+				}
+			}
+		}
+
+		for (const set<int>& hasSubset : containingSubset) {
+			newT.erase(hasSubset);
+		}
+
+		T = newT;
+	}
+
+	return *T.begin();
 }
 
 //-------------------------------------------------------------------------------------------------------------
