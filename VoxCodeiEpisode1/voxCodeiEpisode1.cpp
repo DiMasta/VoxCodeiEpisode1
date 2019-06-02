@@ -530,16 +530,18 @@ public:
 	/// Count how many surveillance nodes will be affected if a bomb is placed in the cell with the given coordinates
 	/// @param[in] rowIdx the index of the row, for the cell to check
 	/// @param[in] colIdx the index of the column, for the cell to check
+	/// @param[out] affectsMovingNode true if moving node is affected
 	/// @return surveillance nodes in range count
-	int countSurveillanceNodesInRange(int rowIdx, int colIdx) const;
+	int countSurveillanceNodesInRange(int rowIdx, int colIdx, bool& affectsMovingNode) const;
 
 	/// Count how many surveillance nodes will be affected, in certain direction,
 	/// if a bomb is placed in the cell with the given coordinates
 	/// @param[in] rowIdx the index of the row, for the cell to check
 	/// @param[in] colIdx the index of the column, for the cell to check
 	/// @param[in] direction the direction for which to check
+	/// @param[out] affectsMovingNode true if moving node is affected
 	/// @return surveillance nodes in range count
-	int countSurveillanceNodesInRangeForDirection(int rowIdx, int colIdx, Direction direction) const;
+	int countSurveillanceNodesInRangeForDirection(int rowIdx, int colIdx, Direction direction, bool& affectsMovingNode) const;
 
 	/// Store the given action, in which cell to place a bomb
 	/// @param[in] rowIdx the index of the row, to place a bomb
@@ -752,15 +754,19 @@ void Grid::evaluateGridCells(int simulationStartRound) {
 			// Consider empty and surveillance node as possible places for bombs
 			// Now snodes moves so in previous turns bomb may be placed on that cell(if it is empty on that turn)
 			if (WALL != cell) {
+				// Add action if a moving node is targetted by the potential bomb
+				bool affectsMovingNode = false;
+
 				// This the count of nodes if the bomb explodes, so the placement of the bomb should be 2 turns before this
-				const int surveillanceNodesInRange = countSurveillanceNodesInRange(rowIdx, colIdx);
+				const int surveillanceNodesInRange = countSurveillanceNodesInRange(rowIdx, colIdx, affectsMovingNode);
 
 				// If the nodes in range are 0 do not set the char to 0, because it is NULL and will terminate the row
 				if (surveillanceNodesInRange) {
 					const int placementRound = simulationStartRound - (BOMB_ROUNDS_TO_EXPLODE - 1);
 
 					// Ignore cells where only one node will be destroyed, not sure if this is right
-					if (surveillanceNodesInRange > 1 || 1 == sNodesCount) {
+					//if (surveillanceNodesInRange > 1 || 1 == sNodesCount) {
+					if ((surveillanceNodesInRange > 2 && affectsMovingNode) || surveillanceNodesInRange == sNodesCount) {
 						addAction(rowIdx, colIdx, surveillanceNodesInRange, placementRound);
 					}
 
@@ -784,12 +790,12 @@ void Grid::evaluateGridCells(int simulationStartRound) {
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-int Grid::countSurveillanceNodesInRange(int rowIdx, int colIdx) const {
+int Grid::countSurveillanceNodesInRange(int rowIdx, int colIdx, bool& affectsMovingNode) const {
 	// If the current cell contains surveillance count them
 	int affectedNodesCount = getCellSNodesCount(getCell(rowIdx, colIdx));
 
 	for (const Direction direction : directions) {
-		affectedNodesCount += countSurveillanceNodesInRangeForDirection(rowIdx, colIdx, direction);
+		affectedNodesCount += countSurveillanceNodesInRangeForDirection(rowIdx, colIdx, direction, affectsMovingNode);
 	}
 
 	return affectedNodesCount;
@@ -798,7 +804,7 @@ int Grid::countSurveillanceNodesInRange(int rowIdx, int colIdx) const {
 //*************************************************************************************************************
 //*************************************************************************************************************
 
-int Grid::countSurveillanceNodesInRangeForDirection(int rowIdx, int colIdx, Direction direction) const {
+int Grid::countSurveillanceNodesInRangeForDirection(int rowIdx, int colIdx, Direction direction, bool& affectsMovingNode) const {
 	int affectedNodesCount = 0;
 
 	for (int range = 0; range < BOMB_RADIUS; ++range) {
@@ -813,6 +819,14 @@ int Grid::countSurveillanceNodesInRangeForDirection(int rowIdx, int colIdx, Dire
 			}
 
 			affectedNodesCount += getCellSNodesCount(cell);
+
+			for (int sNodeIdx = 0; sNodeIdx < sNodesCount; ++sNodeIdx) {
+				const SNode& sNode = sNodes[sNodeIdx];
+				if (rowIdx == sNode.getRow() && colIdx == sNode.getCol() && Direction::INVALID != sNode.getDirection()) {
+					affectsMovingNode = true;
+					break;
+				}
+			}
 		}
 		else {
 			break;
