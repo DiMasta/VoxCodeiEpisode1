@@ -31,8 +31,8 @@ using namespace std;
 //const string INPUT_FILE_NAME = "input_06_moving_nodes_1_bombs.txt";
 //const string INPUT_FILE_NAME = "input_07_indestructible_nodes.txt";
 //const string INPUT_FILE_NAME = "input_08_indestructible_nodes_4_bombs.txt";
-//const string INPUT_FILE_NAME = "input_09_patience.txt";
-const string INPUT_FILE_NAME = "input_10_vandalism.txt";
+const string INPUT_FILE_NAME = "input_09_patience.txt";
+//const string INPUT_FILE_NAME = "input_10_vandalism.txt";
 
 const string OUTPUT_FILE_NAME = "output.txt";
 
@@ -59,6 +59,7 @@ static const int BOMB_RADIUS = 3;
 static const int BOMB_ROUNDS_TO_EXPLODE = 3;
 static const int SECOND_TURN = 1;
 static const int THIRD_TURN = 2;
+static const int MANY_SNODES_TARGETED = 6;
 
 /// Flags
 static const unsigned int SOLUTION_FOUND_FLAG =		0b1000'0000'0000'0000'0000'0000'0000'0000;
@@ -527,6 +528,11 @@ public:
 	/// @param[in] simulationStartRound which turn is checked now
 	void evaluateGridCells(int simulationStartRound);
 
+	/// Activate bomb on the given coordinates
+	/// @param[in] rowIdx the index of the row, for the bomb
+	/// @param[in] colIdx the index of the column, for the bomb
+	void manuallyActivateBomb(int rowIdx, int colIdx);
+
 	/// Count how many surveillance nodes will be affected if a bomb is placed in the cell with the given coordinates
 	/// @param[in] rowIdx the index of the row, for the cell to check
 	/// @param[in] colIdx the index of the column, for the cell to check
@@ -771,26 +777,37 @@ void Grid::evaluateGridCells(int simulationStartRound) {
 				// Add action if a moving node is targetted by the potential bomb
 				bool affectsMovingNode = false;
 
+				// Action too good, no need of further simulation
+				bool immediatelyAddAction = false;
+
 				// This the count of nodes if the bomb explodes, so the placement of the bomb should be 2 turns before this
 				const int surveillanceNodesInRange = countSurveillanceNodesInRange(rowIdx, colIdx, affectsMovingNode);
 
+				// If action destroying many nodes is encountered, apply it(modify the simulationGrid), add it to the best sequence and then continue evaluating
+				if (surveillanceNodesInRange > MANY_SNODES_TARGETED) {
+					manuallyActivateBomb(rowIdx, colIdx);
+					immediatelyAddAction = true;
+				}
+
 				// If the nodes in range are 0 do not set the char to 0, because it is NULL and will terminate the row
 				if (surveillanceNodesInRange) {
+					if (surveillanceNodesInRange == sNodesCount) {
+						solutionFound = true;
+						immediatelyAddAction = true;
+					}
+
 					const int placementRound = simulationStartRound - (BOMB_ROUNDS_TO_EXPLODE - 1);
 					int actionIdx = INVALID_IDX;
 
 					// Ignore cells where only one node will be destroyed, not sure if this is right
-					//if (surveillanceNodesInRange > 1 || 1 == sNodesCount) {
-					if ((surveillanceNodesInRange > 2 && affectsMovingNode) || surveillanceNodesInRange == sNodesCount) {
+					if ((surveillanceNodesInRange > 2 && affectsMovingNode) || immediatelyAddAction) {
 						actionIdx = addAction(rowIdx, colIdx, surveillanceNodesInRange, placementRound);
 					}
 
-					// Only one action is needed to destroy all surveillance nodes
-					if (surveillanceNodesInRange == sNodesCount) {
-						solutionFound = true;
+					if (immediatelyAddAction) {
 						actionsBestSequence[placementRound] = actionIdx;
 						solutionActionsCount = placementRound + 1;
-						break;
+						//break;
 					}
 				}
 			}
@@ -798,6 +815,35 @@ void Grid::evaluateGridCells(int simulationStartRound) {
 
 		if (solutionFound) {
 			break;
+		}
+	}
+}
+
+//*************************************************************************************************************
+//*************************************************************************************************************
+
+void Grid::manuallyActivateBomb(int rowIdx, int colIdx) {
+	for (const Direction direction : directions) {
+		int rowRange = rowIdx;
+		int colRange = colIdx;
+
+		// Aplly bomb range
+		for (int range = 0; range < BOMB_RADIUS; ++range) {
+			rowRange += MOVE_IN_ROWS[static_cast<int>(direction)];
+			colRange += MOVE_IN_COLS[static_cast<int>(direction)];
+
+			if (rowRange < 0 || rowRange >= height || colRange < 0 || colRange >= width) {
+				break; // Continue with next direction
+			}
+
+			Cell& cell = simulationGrid[rowRange][colRange];
+
+			if (WALL == cell) {
+				break; // Continue with next direction
+			}
+			else if (SURVEILLANCE_NODE & cell) {
+				cell = EMPTY_FLAG; // Just plain delete of nodes, no need to consider other bombs
+			}
 		}
 	}
 }
@@ -878,6 +924,8 @@ int Grid::actionAlreadyAdded(int rowIdx, int colIdx, int afffectedSNodesCount, i
 			idx = actionIdx;
 
 			if (afffectedSNodesCount > action.afffectedSNodesCount) {
+				action.row = rowIdx;
+				action.col = colIdx;
 				action.afffectedSNodesCount = afffectedSNodesCount;
 				action.palcementRound = palcementRound;
 			}
